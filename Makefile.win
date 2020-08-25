@@ -1,0 +1,60 @@
+SOURCES		:=	source glad/src imgui
+INCLUDES	:=	source glad/include imgui
+EXTRAS		:=	extra-libs
+DATA		:=	data
+BUILD		:=	build-win
+TARGET		:=	$(notdir $(CURDIR)).exe
+
+LIBS		:=	enet64 glfw3 opengl32 gdi32 ws2_32 winmm m
+EXTRA_INCS	:=	glfw3 enet64 glm mingw-std-threads
+
+CFLAGS		:=	-O2 -Wall -Wextra -ffunction-sections -Wno-unused-parameter -Wno-unused-variable
+CXXFLAGS	:=	$(CFLAGS) -std=c++17 -fno-rtti
+
+# https://spin.atomicobject.com/2016/08/26/makefile-c-projects/
+SRCS	:=	$(shell find $(SOURCES) -name *.cpp -or -name *.c)
+DATAS	:=	$(shell find $(DATA) -name *.png -or -name *.glsl)
+OBJS	:=	$(SRCS:%=$(BUILD)/%.o)
+DATAS_H	:=	$(DATAS:%=$(BUILD)/%.h)
+DEPS	:=	$(OBJS:.o=.d) $(DATAS_H:.h=.d)
+EXTRA_IS	:=	$(foreach ex,$(EXTRA_INCS),$(EXTRAS)/$(ex)/include)
+INC_DIRS	:=	$(shell find $(INCLUDES) -type d) $(addprefix $(BUILD)/,$(DATA)) $(EXTRA_IS)
+INC_FLAGS	:=	$(addprefix -I,$(INC_DIRS))
+CPPFLAGS	:=	$(INC_FLAGS) $(LIB_DIRS_F) -MMD -MP
+LDFLAGS		:=	-Wl,--gc-sections -static $(addprefix -L,$(EXTRAS)/libs) $(addprefix -l,$(LIBS))
+
+CC			:=	x86_64-w64-mingw32-gcc
+CXX			:=	x86_64-w64-mingw32-g++
+
+.PHONY:	all clean
+
+all: $(TARGET)
+	@echo Compilation complete
+
+clean:
+	@echo "Cleaning..."
+	@rm -rf $(BUILD) $(TARGET)
+	@echo "Done!"
+
+$(TARGET): $(DATAS_H) $(OBJS)
+	$(CXX) -o $@ $(OBJS) $(LDFLAGS)
+
+# c source
+$(BUILD)/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+# c++ source
+$(BUILD)/%.cpp.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/%.png.h: %.png
+	@mkdir -p $(dir $@)
+	@python3 converter.py $@ $<
+
+$(BUILD)/%.glsl.h: %.glsl
+	@mkdir -p $(dir $@)
+	@python3 converter.py $@ $<
+
+-include $(DEPS)
