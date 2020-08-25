@@ -5,6 +5,8 @@ Uses OpenGL, GLFW, GLM, Dear ImGui, ENet, and mingw-std-threads for c++11 thread
 
 ## Compilation
 
+Requirements: Python 3 and the Pillow module for converting data files into headers
+
 For Linux:
 - get gcc (or clang, probably works too) and the development packages for libglm, libglfw3, libenet, then `make nix` in the root of the repo. Tested on Debian 10.  
 
