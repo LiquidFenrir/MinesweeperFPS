@@ -4,6 +4,8 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <cstdio>
 
 class Coord {
     int width, height;

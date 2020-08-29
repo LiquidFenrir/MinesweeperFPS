@@ -1,12 +1,10 @@
 SOURCES		:=	source glad/src imgui
 INCLUDES	:=	source glad/include imgui
-EXTRAS		:=	extra-libs
 DATA		:=	data
 BUILD		:=	build-nix
 TARGET		:=	$(notdir $(CURDIR))
 
 LIBS		:=	glfw enet dl pthread m
-EXTRA_INCS	:=	
 
 CFLAGS		:=	-O2 -Wall -Wextra -ffunction-sections -Wno-unused-parameter -Wno-unused-variable
 CXXFLAGS	:=	$(CFLAGS) -std=c++17 -fno-rtti
@@ -17,11 +15,10 @@ DATAS	:=	$(shell find $(DATA) -name *.png -or -name *.glsl)
 OBJS	:=	$(SRCS:%=$(BUILD)/%.o)
 DATAS_H	:=	$(DATAS:%=$(BUILD)/%.h)
 DEPS	:=	$(OBJS:.o=.d) $(DATAS_H:.h=.d)
-EXTRA_IS	:=	$(foreach ex,$(EXTRA_INCS),$(EXTRAS)/$(ex)/include)
-INC_DIRS	:=	$(shell find $(INCLUDES) -type d) $(addprefix $(BUILD)/,$(DATA)) $(EXTRA_IS)
+INC_DIRS	:=	$(shell find $(INCLUDES) -type d) $(addprefix $(BUILD)/,$(DATA))
 INC_FLAGS	:=	$(addprefix -I,$(INC_DIRS))
 CPPFLAGS	:=	$(INC_FLAGS) $(LIB_DIRS_F) -MMD -MP
-LDFLAGS		:=	-Wl,--gc-sections $(addprefix -L,$(EXTRAS)/libs) $(addprefix -l,$(LIBS))
+LDFLAGS		:=	-Wl,--gc-sections $(addprefix -l,$(LIBS))
 
 .PHONY:	all clean
 

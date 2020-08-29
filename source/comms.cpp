@@ -1,4 +1,5 @@
 #include "comms.h"
+#include <cstring>
 
 static constexpr float scale = 100000.0f;
 void PlayerData::fill(const PacketDataPlayerInit& p)
