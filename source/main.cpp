@@ -113,14 +113,20 @@ static void do_graphical()
 {
     GLFWmonitor* primary = glfwGetPrimaryMonitor();
     int total_resolutions;
-    GLFWvidmode* m = glfwGetVideoModes(primary, &total_resolutions);
+    const GLFWvidmode* m = glfwGetVideoModes(primary, &total_resolutions);
 
     std::vector<std::pair<int, int>> resolution_results;
     for(auto mp = m; mp != m + total_resolutions; ++mp)
     {
         const auto& m = *mp;
-        resolution_results.push_back(make_tuple(m->width, m->height));
+        auto p = std::make_pair(m.width, m.height);
+        if(std::find(resolution_results.cbegin(), resolution_results.cend(), p) == resolution_results.cend())
+        {
+            resolution_results.push_back(std::move(p));
+        }
     }
+    total_resolutions = resolution_results.size();
+
     std::sort(resolution_results.begin(), resolution_results.end());
     const std::string possible_resolutions_str = [&]() {
         std::string s;
@@ -273,7 +279,7 @@ static void do_graphical()
 
         if(usr[0] == 0) strncpy(usr, "Player", MAX_NAME_LEN);
     };
-    set_username(usernam);
+    set_username(username);
     char server_address[2048] = {0};
 
     std::array<float, 4> crosshair_color{{

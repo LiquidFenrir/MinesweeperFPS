@@ -290,20 +290,20 @@ void MineServer::update(const float deltatime)
         memcpy(&pitch_int, &pitch_bytes, sizeof(int16_t));
         c.data.pitch = pitch_int;
 
-        const auto going_towards = glm::radians(float(ENET_NET_TO_HOST_16(c.doing.going_towards)));
+        const auto going_towards = glm::radians(float(ENET_NET_TO_HOST_16(c.doing.going_towards)) / TransferScaling);
         const auto yaw_rads = glm::radians(float(c.data.yaw));
         const auto pitch_rads = glm::radians(float(c.data.pitch));
 
         if(c.doing.going_mag)
         {
             glm::vec3 Forward{
-                cos(yaw_rads),
+                cosf(yaw_rads),
                 0.0f,
-                sin(yaw_rads)
+                sinf(yaw_rads)
             };
             glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
 
-            c.data.position += velocity * (c.doing.going_mag/255.0f) * ((Forward * cosf(going_towards)) + Right * sinf(going_towards));
+            c.data.position += velocity * (c.doing.going_mag/255.0f) * ((Forward * sinf(going_towards)) + Right * cosf(going_towards));
 
             if(c.data.position[0] < 0.5f)
             {
@@ -323,16 +323,16 @@ void MineServer::update(const float deltatime)
                 c.data.position[2] = height - 0.5f;
             }
         }
-        
+
         c.data.looking_at_x = -1;
         c.data.looking_at_y = -1;
 
         if(c.data.pitch <= min_pitch_to_look)
         {
             const glm::vec3 Front{
-                cos(yaw_rads) * cos(pitch_rads),
-                sin(pitch_rads),
-                sin(yaw_rads) * cos(pitch_rads)
+                cosf(yaw_rads) * cosf(pitch_rads),
+                sinf(pitch_rads),
+                sinf(yaw_rads) * cosf(pitch_rads)
             };
             const auto floorNormal = glm::vec3(0.0f, 1.0f, 0.0f);
             const auto floorPos = glm::vec3(0.0f, -1.0f, 0.0f);
@@ -371,7 +371,7 @@ void MineServer::update(const float deltatime)
             }
         }
 
-        c.doing.going_towards = 5;
+        c.doing.going_mag = 0;
         c.doing.action = 0;
     }
 }

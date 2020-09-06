@@ -7,6 +7,7 @@
 
 static constexpr enet_uint16 COMMS_PORT = 37777;
 static inline constexpr size_t MAX_NAME_LEN = 32;
+inline constexpr float TransferScaling =  50.0f;
 inline constexpr float MovementSpeed =  3.75f;
 
 struct EnetHostDeleter {

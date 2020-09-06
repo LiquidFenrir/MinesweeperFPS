@@ -22,8 +22,8 @@ For Windows 64-bit, on Linux (Tested on Debian 10):
 - then `make win` in the root of the repo. 
 
 For Windows 64-bit, on Windows:  
-- MSYS2's mingw-w64-gcc might work? Untested.  
-- MSVC (tested with v142 and Visual Studio 2019) (NOTE: Rebuilds entire project every time) 
+- MSYS2's Mingw-w64 64bit x86_64-w64-gcc works. Same instructions as Windows build on Linux, but in the Mingw-w64 64bit shell  
+- MSVC (tested with v142 and Visual Studio 2019) (NOTE: Rebuilds entire project every time)  
   - Launch a Developer PowerShell  
   - Set it to x64 mode using the vcvarsall.bat script provided by Visual Studio  
   - Navigate to the root of the repo  

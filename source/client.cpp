@@ -284,9 +284,9 @@ namespace {
         };
         Fillers::fill_quad_generic(verts, 6,  // -Z
             PDD3{
-                {+0.5f, -0.5f, -0.5f - MyEpsilon},
-                {0.0f,+1.0f,0.0f},
-                {+1.0f,0.0f,0.0f}
+                {-0.5f, +0.5f, -0.5f - MyEpsilon},
+                {+1.0f,0.0f,0.0f},
+                {0.0f,+1.0f,0.0f}
             },
         eye_uv, solidBlack);
     }
@@ -425,9 +425,9 @@ namespace {
                 {0.0f, 1.0f, 0.0f}
             },
             PDD2{
-                {0.0625f + MyEpsilon, 1.0f - MyEpsilon},
-                {0.0625f - (MyEpsilon*2.0f), 0.0f},
-                {0.0f, 0.125f - (MyEpsilon*2.0f)}
+                {0.0625f + (MyEpsilon*2.0f), 1.0f - 0.125f - (MyEpsilon*2.0f)},
+                {0.0625f - (MyEpsilon*4.0f), 0.0f},
+                {0.0f, 0.125f - (MyEpsilon*4.0f)}
             },
             solidWhite
         );
@@ -678,9 +678,10 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     cs_packet.going_mag = 0;
     cs_packet.going_towards = 0;
 
-    GLFWgamepadstate state;
-    if(glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
+    if(GLFWgamepadstate state; glfwGetGamepadState(GLFW_JOYSTICK_1, &state) == GLFW_TRUE)
     {
+        fprintf(stderr, "got gamepad 1\n");
+
         if(state.buttons[GLFW_GAMEPAD_BUTTON_START])
         {
             in_esc_menu = true;
@@ -702,7 +703,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         float x_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_X);
         float y_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_Y);
 
-        cs_packet.going_towards = enet_uint16(glm::degrees(atan2f(x_move, y_move)) + 360) % 360;
+        cs_packet.going_towards = enet_uint16((glm::degrees(atan2f(y_move, x_move)) + 360) * TransferScaling) % enet_uint16(360 * TransferScaling);
         cs_packet.going_mag = sqrtf((x_move * x_move) + (y_move * y_move)) * 255;
 
         xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X);
@@ -728,28 +729,28 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     if(cs_packet.going_mag == 0)
     {
         cs_packet.going_towards = 4 | 1;
-        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) // -Y
             cs_packet.going_towards ^= 1;
-        else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)  // +Y
             cs_packet.going_towards ^= (2 | 1);
 
-        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) // -X
             cs_packet.going_towards ^= 4;
-        else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) // +X
             cs_packet.going_towards ^= (8 | 4);
         
-        if(cs_packet.going_towards)
+        if(cs_packet.going_towards != (4 | 1))
         {
             const int forward_movement = -(int(cs_packet.going_towards & 3) - 1);
             const int side_movement = int((cs_packet.going_towards >> 2) & 3) - 1;
-            cs_packet.going_towards = enet_uint16(glm::degrees(atan2f(side_movement, forward_movement)) + 360) % 360;
+            cs_packet.going_towards = enet_uint16((glm::degrees(atan2f(forward_movement, side_movement)) + 360) * TransferScaling) % enet_uint16(360 * TransferScaling);
             cs_packet.going_mag = 255;
         }
     }
 
     if(cs_packet.going_mag)
     {
-        const auto going_rads = glm::radians(float(cs_packet.going_towards));
+        const auto going_rads = glm::radians(float(cs_packet.going_towards) / TransferScaling);
         const auto yaw_rads = glm::radians(float(yaw));
         glm::vec3 Forward{
             cos(yaw_rads),
@@ -758,7 +759,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         };
         glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
 
-        playa.position += velocity * (cs_packet.going_mag / 255.0f) * ((Forward * cosf(going_rads)) + Right * sinf(going_rads));
+        playa.position += velocity * (cs_packet.going_mag / 255.0f) * ((Forward * sinf(going_rads)) + Right * cosf(going_rads));
 
         if(playa.position[0] < 0.5f)
         {
@@ -1004,7 +1005,6 @@ glm::mat4 MineClient::get_view_matrix()
 
     return glm::lookAt(self.position, self.position + Front, Up);
 }
-
 
 glm::mat4 MineClient::get_top_view_matrix()
 {

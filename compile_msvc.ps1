@@ -92,7 +92,7 @@ for ($index = 0; $index -lt $source_files_cpp.count; $index++)
     $fi = $source_files_cpp[$index]
     $fo = $obj_files_cpp[$index]
 
-    $argslist = [System.Collections.ArrayList]@("/O2", "/W2", "/std:c++17", "/EHsc")
+    $argslist = [System.Collections.ArrayList]@("/O2", "/std:c++17", "/EHsc")
 
     foreach ( $inc in $include_cmds)
     {
@@ -113,7 +113,7 @@ for ($index = 0; $index -lt $source_files_c.count; $index++)
     $fi = $source_files_c[$index]
     $fo = $obj_files_c[$index]
 
-    $argslist = [System.Collections.ArrayList]@("/O2", "/W2")
+    $argslist = [System.Collections.ArrayList]@("/O2")
 
     foreach ( $inc in $include_cmds)
     {

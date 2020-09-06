@@ -15,7 +15,7 @@ DATAS	:=	$(shell find $(DATA) -name *.png -or -name *.glsl)
 OBJS	:=	$(SRCS:%=$(BUILD)/%.o)
 DATAS_H	:=	$(DATAS:%=$(BUILD)/%.h)
 DEPS	:=	$(OBJS:.o=.d) $(DATAS_H:.h=.d)
-INC_DIRS	:=	$(shell find $(INCLUDES) -type d) $(addprefix $(BUILD)/,$(DATA))
+INC_DIRS	:=	$(INCLUDES) $(addprefix $(BUILD)/,$(DATA))
 INC_FLAGS	:=	$(addprefix -I,$(INC_DIRS))
 CPPFLAGS	:=	$(INC_FLAGS) $(LIB_DIRS_F) -MMD -MP
 LDFLAGS		:=	-Wl,--gc-sections $(addprefix -l,$(LIBS))
