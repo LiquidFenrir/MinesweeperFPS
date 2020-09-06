@@ -6,6 +6,7 @@
 
 #include <GLFW/glfw3.h>
 #include <vector>
+#include <array>
 #include <memory>
 #include <chrono>
 
@@ -39,7 +40,7 @@ struct MineClient {
     void disconnect(bool change_state);
     void cancel();
 
-    void handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu);
+    void handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, const float deltaTime);
     void render(RenderInfo& info);
     void send();
 
@@ -65,7 +66,6 @@ private:
     bool pressed_m2;
     bool first_mouse;
     float prevx, prevy;
-    std::chrono::time_point<std::chrono::steady_clock> last_int_upd;
 
     // to send at connection
     std::array<float, 4> my_crosshair_color;

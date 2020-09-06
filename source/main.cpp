@@ -1,6 +1,8 @@
 #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
-#include "graphics_includes.h"
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 #include <enet/enet.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -11,12 +13,14 @@
 #include <memory>
 #include <tuple>
 #include <array>
-#ifdef _WIN32
+#ifdef __MINGW32__
 #include "mingw.thread.h"
 #else
 #include <thread>
 #endif
 #include <chrono>
+
+#include "graphics_includes.h"
 
 #include "globjects.h"
 #include "focus.h"
@@ -56,9 +60,13 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+static bool check_username_char_valid(const char c)
+{
+    return (c == '_' || c== ' ' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
+}
 static int username_callback(ImGuiInputTextCallbackData* data)
 {
-    if(auto c = data->EventChar; !(c == '_' || c== ' ' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
+    if(auto c = data->EventChar; !check_username_char_valid(c))
     {
         return 1;
     }
@@ -84,32 +92,13 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
             server->update(std::chrono::duration<float>{now - last_int_upd}.count());
             last_int_upd = now;
 
-            if(std::chrono::duration<float>{now - last_ext_upd}.count() >= (0.03125f/2.0f)) {
+            if(std::chrono::duration<float>{now - last_ext_upd}.count() >= 0.05f) { // 20 full updates per second
                 server->send_update();
                 last_ext_upd = now;
             }
         }
         server->receive();
     }
-}
-
-static void fill_tri(VertexPtr verts)
-{
-    verts[0] = Vertex{
-        {-0.5f, 0.5f, 0.0f},
-        {0.0f, 1.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f}
-    };
-    verts[1] = Vertex{
-        {+0.5f, 0.5f, 0.0f},
-        {0.0625f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f}
-    };
-    verts[2] = Vertex{
-        {0.0f, -0.5f, 0.0f},
-        {0.0625f, 0.875f},
-        {0.0f, 0.0f, 1.0f, 1.0f}
-    };
 }
 
 struct WindowDeleter {
@@ -122,34 +111,52 @@ using WindowPtr = std::unique_ptr<GLFWwindow, WindowDeleter>;
 
 static void do_graphical()
 {
-    
-    constexpr int total_resolutions = 5;
-    constexpr const char* possible_resolutions[total_resolutions] = {
-        "1920x1080",
-        "1600x900",
-        "1366x768",
-        "1280x720",
-        "1024x768"
-    };
-    constexpr const std::pair<int, int> resolution_results[total_resolutions] = {
-        {1920, 1080},
-        {1600, 900},
-        {1366, 768},
-        {1280, 720},
-        {1024, 768}
-    };
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    int total_resolutions;
+    GLFWvidmode* m = glfwGetVideoModes(primary, &total_resolutions);
+
+    std::vector<std::pair<int, int>> resolution_results;
+    for(auto mp = m; mp != m + total_resolutions; ++mp)
+    {
+        const auto& m = *mp;
+        resolution_results.push_back(make_tuple(m->width, m->height));
+    }
+    std::sort(resolution_results.begin(), resolution_results.end());
+    const std::string possible_resolutions_str = [&]() {
+        std::string s;
+        for(const auto& [w, h] : resolution_results)
+        {
+            s += std::to_string(w) + "x" + std::to_string(h) + '\0';
+        }
+        return s;
+    }();
+    const std::vector<const char*> possible_resolutions =[&]() {
+        std::vector<const char*> v;
+        std::string_view sv{possible_resolutions_str};
+        for(int i = 0; i < total_resolutions; ++i)
+        {
+            v.push_back(sv.data());
+            sv.remove_prefix(sv.find('\0', 3) + 1);
+        }
+        return v;
+    }();
     int current_resolution = total_resolutions - 1;
 
     // Decide GL+GLSL versions
     // GL 3.0 + GLSL 330
+    #ifndef __SWITCH__
     const char* glsl_version = "#version 330 core";
+    #else
+    const char* glsl_version = "#version 300 es";
+    #endif
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
+    const auto [initial_w, initial_h] = resolution_results.back();
     // Create window with graphics context
-    WindowPtr window_holder(glfwCreateWindow(resolution_results[current_resolution].first, resolution_results[current_resolution].second, "MinesweeperFPS", nullptr, nullptr));
+    WindowPtr window_holder(glfwCreateWindow(initial_w, initial_h, "MinesweeperFPS v1.1", nullptr, nullptr));
     if(!window_holder)
         return;
 
@@ -186,8 +193,7 @@ static void do_graphical()
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    // io.FontGlobalScale = 1.0f;
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -205,6 +211,7 @@ static void do_graphical()
     Shader flatShader(flat_vsh_shader, fsh_shader);
 
     const auto& [tex_width, tex_height, tex_data] = Images::spritesheet;
+    glActiveTexture(GL_TEXTURE0);
     Texture spritesheet(tex_width, tex_height, tex_data.data());
 
     flatShader.use();
@@ -212,11 +219,61 @@ static void do_graphical()
     worldShader.use();
     worldShader.setInt("texture1", 0);
 
-    auto tribuf = Buffer::Tris(1);
-    fill_tri(tribuf.getAllVerts());
+    char username[MAX_NAME_LEN + 1] = {0};
+    const auto set_username = [](char* usr) {
+        #ifdef __SWITCH__
+        Result rc = accountInitialize(AccountServiceType_Application);
+        if(R_FAILED(rc)) return;
 
-    char username[MAX_NAME_LEN] = {0};
-    strncpy(username, "Player", MAX_NAME_LEN - 1);
+        AccountUid userID={0};
+        AccountProfile profile;
+        AccountUserData userdata;
+        AccountProfileBase profilebase;
+
+        rc = accountGetPreselectedUser(&userID);
+        if(R_SUCCEEDED(rc))
+        {
+            rc = accountGetProfile(&profile, userID);
+            if(R_SUCCEEDED(rc))
+            {
+                rc = accountProfileGet(&profile, &userdata, &profilebase);//userdata is otional, see libnx acc.h.
+                if(R_SUCCEEDED(rc))
+                {
+                    for(size_t i = 0, o = 0; i < MAX_NAME_LEN; ++i)
+                    {
+                        const char c = profilebase.nickname[i];
+                        if(c & 0x80) // remove all utf-8 characters, only ascii here
+                        {
+                            if(c & 0x40)
+                            {
+                                ++i;
+                                if(c & 0x20)
+                                {
+                                    ++i;
+                                    if(c & 0x10)
+                                    {
+                                        ++i;
+                                    }
+                                }
+                            }
+                        }
+                        else if(check_username_char_valid(c)) // and even then, only a subset of ascii (alphanumeric + _ + space)
+                        {
+                            usr[o] = c;
+                            ++o;
+                        }
+                    }
+                }
+
+                accountProfileClose(&profile);
+            }
+        }
+        accountExit();
+        #endif
+
+        if(usr[0] == 0) strncpy(usr, "Player", MAX_NAME_LEN);
+    };
+    set_username(usernam);
     char server_address[2048] = {0};
 
     std::array<float, 4> crosshair_color{{
@@ -261,6 +318,9 @@ static void do_graphical()
 
     float client_start_time = 0.0f;
 
+    auto last_int_upd = std::chrono::steady_clock::now();
+    auto last_ext_upd = last_int_upd;
+
     // Main loop
     while(!glfwWindowShouldClose(window))
     {
@@ -287,26 +347,34 @@ static void do_graphical()
         };
         const MineClient::State st = client ? client->get_state() : MineClient::State::NotConnected;
 
+        const auto now = std::chrono::steady_clock::now();
+        const auto deltaTime = std::chrono::duration<float>{now - last_int_upd}.count();
+
         const auto prev_screen = screen;
         if(screen == MenuScreen::InGame)
         {
-            ENetEvent event;
-            if(client->host && enet_host_service(client->host.get(), &event, 10))
+            if(st != MineClient::State::Playing || std::chrono::duration<float>{now - last_ext_upd}.count() >= 0.05f)
             {
-                switch(event.type)
+                ENetEvent event;
+                if(client->host && enet_host_service(client->host.get(), &event, 10))
                 {
-                case ENET_EVENT_TYPE_CONNECT:
-                    // connection succeeded
-                    break;
-                case ENET_EVENT_TYPE_RECEIVE:
-                    client->receive_packet(event.packet->data, event.packet->dataLength);
-                    // Clean up the packet now that we're done using it.
-                    enet_packet_destroy(event.packet);
-                    break;
-                case ENET_EVENT_TYPE_DISCONNECT:
-                    client->disconnect(true);
-                    break;
+                    switch(event.type)
+                    {
+                    case ENET_EVENT_TYPE_CONNECT:
+                        // connection succeeded
+                        break;
+                    case ENET_EVENT_TYPE_RECEIVE:
+                        client->receive_packet(event.packet->data, event.packet->dataLength);
+                        // Clean up the packet now that we're done using it.
+                        enet_packet_destroy(event.packet);
+                        break;
+                    case ENET_EVENT_TYPE_DISCONNECT:
+                        client->disconnect(true);
+                        break;
+                    }
                 }
+                if(st == MineClient::State::Playing)
+                    last_ext_upd = now;
             }
 
             if(st == MineClient::State::NotConnected)
@@ -376,10 +444,13 @@ static void do_graphical()
                 }
                 else
                 {
-                    client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu);
-                    if(in_esc_menu)
+                    if(deltaTime >= 0.0166f/2.0f) // 2 movement updates per 60fps frame
                     {
-                        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                        client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, deltaTime);
+                        if(in_esc_menu)
+                        {
+                            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                        }
                     }
                 }
             }
@@ -484,7 +555,7 @@ static void do_graphical()
 
             if(screen == MenuScreen::Main)
             {
-                ImGui::Begin("Welcome to MinesweeperFPS!", nullptr, main_window_flags);
+                ImGui::Begin("Welcome to MinesweeperFPS v1.1!", nullptr, main_window_flags);
 
                 ImGui::Text("This is a clone of Minesweeper, where you play in a first person view!");
                 ImGui::Text("It also supports playing with friends, to make large maps easier.");
@@ -508,33 +579,36 @@ static void do_graphical()
                 ImGui::Begin("Settings", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("Player settings");
-                ImGui::InputText("Player name", username, IM_ARRAYSIZE(username), ImGuiInputTextFlags_CallbackCharFilter, username_callback);
+                ImGui::InputText("Player name", username, MAX_NAME_LEN, ImGuiInputTextFlags_CallbackCharFilter, username_callback);
                 ImGui::ColorEdit4("Crosshair color", crosshair_color.data(), ImGuiColorEditFlags_AlphaPreview);
 
-                ImGui::Spacing();
-                ImGui::Text("Graphics settings");
-                if(ImGui::Checkbox("Fullscreen", &fullscreen))
+                if(total_resolutions > 1)
                 {
-                    if(fullscreen)
+                    ImGui::Spacing();
+                    ImGui::Text("Graphics settings");
+                    if(ImGui::Checkbox("Fullscreen", &fullscreen))
                     {
-                        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-                        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-                        glfwGetWindowPos(window, &window_x, &window_y);
-                        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 60);
+                        if(fullscreen)
+                        {
+                            GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+                            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+                            glfwGetWindowPos(window, &window_x, &window_y);
+                            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 60);
+                        }
+                        else
+                        {
+                            const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
+                            glfwSetWindowMonitor(window, nullptr, window_x, window_y, resolution_x, resolution_y, 60);
+                        }
                     }
-                    else
-                    {
-                        const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
-                        glfwSetWindowMonitor(window, nullptr, window_x, window_y, resolution_x, resolution_y, 60);
-                    }
-                }
 
-                if(!fullscreen)
-                {
-                    if(ImGui::Combo("Resolution", &current_resolution, possible_resolutions, total_resolutions))
+                    if(!fullscreen)
                     {
-                        const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
-                        glfwSetWindowSize(window, resolution_x, resolution_y);
+                        if(ImGui::Combo("Resolution", &current_resolution, possible_resolutions.data(), total_resolutions))
+                        {
+                            const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
+                            glfwSetWindowSize(window, resolution_x, resolution_y);
+                        }
                     }
                 }
 
@@ -643,9 +717,10 @@ static void do_graphical()
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
 
-        if(client && st == MineClient::State::Playing)
+        if(client && st == MineClient::State::Playing && deltaTime >= 0.0166f/2.0f)
         {
             client->send();
+            last_int_upd = now;
         }
 
         glfwSwapBuffers(window);
@@ -660,6 +735,7 @@ static void do_graphical()
     ImGui::DestroyContext();
 }
 
+#ifndef __SWITCH__
 static void do_server_alone(char** args)
 {
     const char* width_a = args[0];
@@ -682,6 +758,7 @@ static void do_server_alone(char** args)
     server_thread_func(std::make_unique<MineServer>(width, height, bombs, players));
     printf("Server stopped.\n");
 }
+#endif
 
 int main(int argc, char** argv)
 {
@@ -693,12 +770,14 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    #ifndef __SWITCH__
     if(argc == 6)
     {
         const char* server_indicator = argv[1];
         if(strcmp(server_indicator, "srv") == 0) do_server_alone(argv + 2);
     }
     else
+    #endif
     {
         glfwSetErrorCallback(glfw_error_callback);
         if(glfwInit())

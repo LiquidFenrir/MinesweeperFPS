@@ -470,7 +470,8 @@ username(un)
     address.port = COMMS_PORT;
     peer = enet_host_connect(host.get(), &address, 2, 0);
 
-    cs_packet.going_towards = 5;
+    cs_packet.going_mag = 0;
+    cs_packet.going_towards = 0;
     cs_packet.action = 0;
 }
 
@@ -528,7 +529,6 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         fill_counters(counters_buf.getAllVerts(), SCPacketData{0,0,0,0}, total_bombs, true);
 
         current_state = MineClient::State::Playing;
-        last_int_upd = std::chrono::steady_clock::now();
     }
     else if(current_state == MineClient::State::Playing)
     {
@@ -619,14 +619,11 @@ void MineClient::cancel()
     current_state = MineClient::State::Cancelled;
 }
 
-void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu)
+void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, const float deltaTime)
 {
     if(!Focus::is_focused) return;
 
-    const auto now = std::chrono::steady_clock::now();
-    const float deltatime = std::chrono::duration<float>{now - last_int_upd}.count();
-    last_int_upd = now;
-    const float velocity = MovementSpeed * deltatime;
+    const float velocity = MovementSpeed * deltaTime;
 
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     {
@@ -678,6 +675,42 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     prevx = xpos;
     prevy = ypos;
 
+    cs_packet.going_mag = 0;
+    cs_packet.going_towards = 0;
+
+    GLFWgamepadstate state;
+    if(glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
+    {
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_START])
+        {
+            in_esc_menu = true;
+            first_mouse = true;
+            return;
+        }
+
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_A])
+        {
+            cs_packet.action = 1;
+        }
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_B])
+        {
+            cs_packet.action = 2;
+        }
+
+        #define DEADZONE(ax) state.axes[ax] <= 0.0625f/4.0f ? 0 : state.axes[ax] * 255
+
+        float x_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_X);
+        float y_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_Y);
+
+        cs_packet.going_towards = enet_uint16(glm::degrees(atan2f(x_move, y_move)) + 360) % 360;
+        cs_packet.going_mag = sqrtf((x_move * x_move) + (y_move * y_move)) * 255;
+
+        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X);
+        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+
+        #undef DEADZONE
+    }
+
     auto& playa = players[my_player_id];
     playa.yaw += xoffset * mouse_sensitivity;
     playa.yaw %= 360;
@@ -692,20 +725,31 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     int16_t pitch = playa.pitch;
     memcpy(&cs_packet.pitch, &pitch, sizeof(int16_t));
 
-    cs_packet.going_towards = 5;
-
-    if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cs_packet.going_towards ^= 1;
-    else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cs_packet.going_towards ^= (2 | 1);
-
-    if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cs_packet.going_towards ^= 4;
-    else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cs_packet.going_towards ^= (8 | 4);
-
-    if(unsigned char going_towards = cs_packet.going_towards; going_towards != 5)
+    if(cs_packet.going_mag == 0)
     {
+        cs_packet.going_towards = 4 | 1;
+        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            cs_packet.going_towards ^= 1;
+        else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            cs_packet.going_towards ^= (2 | 1);
+
+        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            cs_packet.going_towards ^= 4;
+        else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            cs_packet.going_towards ^= (8 | 4);
+        
+        if(cs_packet.going_towards)
+        {
+            const int forward_movement = -(int(cs_packet.going_towards & 3) - 1);
+            const int side_movement = int((cs_packet.going_towards >> 2) & 3) - 1;
+            cs_packet.going_towards = enet_uint16(glm::degrees(atan2f(side_movement, forward_movement)) + 360) % 360;
+            cs_packet.going_mag = 255;
+        }
+    }
+
+    if(cs_packet.going_mag)
+    {
+        const auto going_rads = glm::radians(float(cs_packet.going_towards));
         const auto yaw_rads = glm::radians(float(yaw));
         glm::vec3 Forward{
             cos(yaw_rads),
@@ -714,11 +758,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         };
         glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
 
-        const int forward_movement = -(int(going_towards & 3) - 1);
-        const int side_movement = int((going_towards >> 2) & 3) - 1;
-
-        const float ang = atan2f(side_movement, forward_movement);
-        playa.position += velocity * ((Forward * cosf(ang)) + Right * sinf(ang));
+        playa.position += velocity * (cs_packet.going_mag / 255.0f) * ((Forward * cosf(going_rads)) + Right * sinf(going_rads));
 
         if(playa.position[0] < 0.5f)
         {
@@ -745,8 +785,6 @@ void MineClient::render(RenderInfo& info)
     const auto& self = players[my_player_id];
 
     glEnable(GL_DEPTH_TEST);
-
-    glActiveTexture(GL_TEXTURE0);
 
     // bind textures on corresponding texture units
     info.spritesheet.bind();
@@ -924,6 +962,7 @@ void MineClient::send()
 {
     if(host)
     {
+        cs_packet.going_towards = ENET_HOST_TO_NET_16(cs_packet.going_towards);
         cs_packet.yaw = ENET_HOST_TO_NET_16(cs_packet.yaw);
         cs_packet.pitch = ENET_HOST_TO_NET_16(cs_packet.pitch);
 
@@ -931,9 +970,10 @@ void MineClient::send()
         enet_peer_send(peer, 0, packet);
         enet_host_flush(host.get());
 
-        cs_packet.going_towards = 5;
+        cs_packet.going_mag = 0;
         cs_packet.action = 0;
 
+        cs_packet.going_towards = ENET_NET_TO_HOST_16(cs_packet.going_towards);
         cs_packet.yaw = ENET_NET_TO_HOST_16(cs_packet.yaw);
         cs_packet.pitch = ENET_NET_TO_HOST_16(cs_packet.pitch);
     }

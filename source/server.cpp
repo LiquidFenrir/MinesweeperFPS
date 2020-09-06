@@ -290,10 +290,11 @@ void MineServer::update(const float deltatime)
         memcpy(&pitch_int, &pitch_bytes, sizeof(int16_t));
         c.data.pitch = pitch_int;
 
+        const auto going_towards = glm::radians(float(ENET_NET_TO_HOST_16(c.doing.going_towards)));
         const auto yaw_rads = glm::radians(float(c.data.yaw));
         const auto pitch_rads = glm::radians(float(c.data.pitch));
 
-        if(c.doing.going_towards != 5)
+        if(c.doing.going_mag)
         {
             glm::vec3 Forward{
                 cos(yaw_rads),
@@ -302,11 +303,7 @@ void MineServer::update(const float deltatime)
             };
             glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
 
-            const int forward_movement = -(int(c.doing.going_towards & 3) - 1);
-            const int side_movement = int((c.doing.going_towards >> 2) & 3) - 1;
-
-            const float ang = atan2f(side_movement, forward_movement);
-            c.data.position += velocity * ((Forward * cosf(ang)) + Right * sinf(ang));
+            c.data.position += velocity * (c.doing.going_mag/255.0f) * ((Forward * cosf(going_towards)) + Right * sinf(going_towards));
 
             if(c.data.position[0] < 0.5f)
             {

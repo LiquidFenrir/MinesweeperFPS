@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 
 static constexpr enet_uint16 COMMS_PORT = 37777;
-static inline constexpr size_t MAX_NAME_LEN = 16;
+static inline constexpr size_t MAX_NAME_LEN = 32;
 inline constexpr float MovementSpeed =  3.75f;
 
 struct EnetHostDeleter {
@@ -42,7 +42,8 @@ struct PacketDataPlayerInit {
 // every tick, player sends this
 struct CSPacketData {
     unsigned char action;
-    unsigned char going_towards;
+    unsigned char going_mag;
+    enet_uint16 going_towards;
     enet_uint16 yaw, pitch;
 };
 // and server sends back this
