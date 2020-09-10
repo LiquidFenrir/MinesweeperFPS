@@ -316,7 +316,7 @@ static void do_graphical(std::string filepath)
     bool fullscreen = false;
 
     float mouse_sensitivity = 3.5f;
-    float fov = 45.0;
+    float fov = 60.0f;
     int crosshair_distance = 5;
     int crosshair_width = 8;
     int crosshair_length = 20;
@@ -488,6 +488,8 @@ static void do_graphical(std::string filepath)
                     ImGui::SliderInt("HUD height", &overlay_h, 10, 90);
                     ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20);
 
+                    ImGui::Spacing();
+                    ImGui::SliderFloat("Field of View", &fov, 30.0f, 90.0f);
                     ImGui::Spacing();
                     ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f);
                     ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16);
@@ -788,7 +790,8 @@ static void do_graphical(std::string filepath)
                 worldShader, flatShader, spritesheet, display_w, display_h,
                 crosshair_distance, crosshair_width, crosshair_length,
                 minimap_scale,
-                overlay_w, overlay_h
+                overlay_w, overlay_h,
+                fov
             };
             client->render(info);
         }

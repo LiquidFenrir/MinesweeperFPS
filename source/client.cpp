@@ -796,7 +796,7 @@ void MineClient::render(RenderInfo& info)
     info.worldShader.use();
 
     // pass projection matrix to shader (note that in this case it could change every frame)
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)info.display_w / (float)info.display_h, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(info.fov), (float)info.display_w / (float)info.display_h, 0.1f, 100.0f);
     info.worldShader.setMat4("projection", projection);
 
     // camera/view transformation

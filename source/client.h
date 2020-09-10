@@ -19,6 +19,7 @@ struct MineClient {
         const int crosshair_distance, crosshair_width, crosshair_length;
         const int minimap_scale;
         const int overlay_w, overlay_h;
+        const float fov;
     };
 
     enum class State : unsigned char {
