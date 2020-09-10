@@ -316,7 +316,7 @@ static void do_graphical(std::string filepath)
     bool fullscreen = false;
 
     float mouse_sensitivity = 3.5f;
-    float fov = 60.0f;
+    int fov = 60;
     int crosshair_distance = 5;
     int crosshair_width = 8;
     int crosshair_length = 20;
@@ -352,24 +352,29 @@ static void do_graphical(std::string filepath)
                     sv = sv.substr(2);
                     const size_t len = sv.find_first_of(';');
                     const auto val = sv.substr(0, len);
+
+                    constexpr auto convert_to_float = [](auto val) { return std::stof(std::string(val)); };
+                    constexpr auto convert_to_int = [](auto val) { return std::stoi(std::string(val)); };
                     switch(front)
                     {
                         case 'n':
                             memset(username, 0, MAX_NAME_LEN);
                             strncpy(username, val.data(), std::min(MAX_NAME_LEN, len));
                             break;
-                        case 'r':
-                            crosshair_color[0] = std::stof(std::string(val));
-                            break;
-                        case 'g':
-                            crosshair_color[1] = std::stof(std::string(val));
-                            break;
-                        case 'b':
-                            crosshair_color[2] = std::stof(std::string(val));
-                            break;
-                        case 'a':
-                            crosshair_color[3] = std::stof(std::string(val));
-                            break;
+                        #define MAP_TO(constant, out, conv) case constant: out = conv(val); break;
+                        MAP_TO('r', crosshair_color[0], convert_to_float)
+                        MAP_TO('g', crosshair_color[1], convert_to_float)
+                        MAP_TO('b', crosshair_color[2], convert_to_float)
+                        MAP_TO('a', crosshair_color[3], convert_to_float)
+                        MAP_TO('S', mouse_sensitivity, convert_to_float)
+                        MAP_TO('d', crosshair_distance, convert_to_int)
+                        MAP_TO('w', crosshair_width, convert_to_int)
+                        MAP_TO('l', crosshair_length, convert_to_int)
+                        MAP_TO('W', overlay_w, convert_to_int)
+                        MAP_TO('H', overlay_h, convert_to_int)
+                        MAP_TO('Z', minimap_scale, convert_to_int)
+                        MAP_TO('F', fov, convert_to_int)
+                        #undef MAP_TO
                         default:
                             break;
                     }
@@ -489,7 +494,7 @@ static void do_graphical(std::string filepath)
                     ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20);
 
                     ImGui::Spacing();
-                    ImGui::SliderFloat("Field of View", &fov, 30.0f, 90.0f);
+                    ImGui::SliderInt("Field of View", &fov, 30, 90);
                     ImGui::Spacing();
                     ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f);
                     ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16);
@@ -818,21 +823,31 @@ static void do_graphical(std::string filepath)
         {
             std::string to_write = CONFIG_VERSION;
             to_write += ';';
-            to_write += "n:";
-            to_write += username;
-            to_write += ';';
-            to_write += "r:";
-            to_write += std::to_string(crosshair_color[0]);
-            to_write += ';';
-            to_write += "g:";
-            to_write += std::to_string(crosshair_color[1]);
-            to_write += ';';
-            to_write += "b:";
-            to_write += std::to_string(crosshair_color[2]);
-            to_write += ';';
-            to_write += "a:";
-            to_write += std::to_string(crosshair_color[3]);
-            to_write += ';';
+
+            #define ADD(constant, in) { \
+                to_write += constant; \
+                to_write += ':'; \
+                to_write += in; \
+                to_write += ';'; \
+            }
+            #define MAP_TO(constant, in) ADD(constant, std::to_string(in))
+
+            ADD('n', username)
+            MAP_TO('r', crosshair_color[0])
+            MAP_TO('g', crosshair_color[1])
+            MAP_TO('b', crosshair_color[2])
+            MAP_TO('a', crosshair_color[3])
+            MAP_TO('S', mouse_sensitivity)
+            MAP_TO('d', crosshair_distance)
+            MAP_TO('w', crosshair_width)
+            MAP_TO('l', crosshair_length)
+            MAP_TO('W', overlay_w)
+            MAP_TO('H', overlay_h)
+            MAP_TO('Z', minimap_scale)
+            MAP_TO('F', fov)
+
+            #undef MAP_TO
+            #undef ADD
 
             fwrite(to_write.c_str(), 1, to_write.size(), fh);
             fclose(fh);
