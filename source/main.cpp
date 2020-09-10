@@ -556,6 +556,9 @@ static void do_graphical(std::string filepath)
                 ImGui::Begin("You lost to the mines!", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("What a shame, you didn't win this time! Better luck on the next one.");
+                ImGui::Text("Loss in %02d min%s %02d second%s",
+                            client->sc_packet.minutes, client->sc_packet.minutes == 1 ? "" : "s",
+                            client->sc_packet.seconds, client->sc_packet.seconds == 1 ? "" : "s");
 
                 ImGui::Separator();
                 if(ImGui::Button("Back to main menu")) exit_lambda();
@@ -569,6 +572,9 @@ static void do_graphical(std::string filepath)
                 ImGui::Begin("You won!", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("Congratulations! Maybe challenge yourself with a bigger field?");
+                ImGui::Text("Victory in %02d min%s %02d second%s",
+                            client->sc_packet.minutes, client->sc_packet.minutes == 1 ? "" : "s",
+                            client->sc_packet.seconds, client->sc_packet.seconds == 1 ? "" : "s");
 
                 ImGui::Separator();
                 if(ImGui::Button("Back to main menu")) exit_lambda();

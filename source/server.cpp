@@ -252,6 +252,7 @@ width(map_width), height(map_height), had_first(false),
 bombs(map_width * map_height * bombs_percent / 100.0f),
 world(map_width * map_height), clients(player_amount),
 data_to_send(sizeof(SCPacketData) + (sizeof(SCPacketDataPlayer) * clients.size()) + world.size()),
+upd_packet_id(0),
 start_time(0), generated(false)
 {
     /* Bind the server to the default localhost.     */
@@ -401,19 +402,20 @@ void MineServer::send_update()
         idx += 1;
     }
 
-    static ENetPacket* update_packet = nullptr;
-    if(update_packet != nullptr)
+    upd_packets[upd_packet_id].reset(enet_packet_create(data_to_send.data(), data_to_send.size(), ENET_PACKET_FLAG_RELIABLE));
+    enet_host_broadcast(host.get(), 0, upd_packets[upd_packet_id].get());
+
+    upd_packet_id = 1 - upd_packet_id; // 0 -> 1, 1 -> 0...
+    if(upd_packets[upd_packet_id])
     {
-        enet_packet_destroy(update_packet);
+        upd_packets[upd_packet_id].reset();
     }
-    update_packet = enet_packet_create(data_to_send.data(), data_to_send.size(), ENET_PACKET_FLAG_RELIABLE);
-    enet_host_broadcast(host.get(), 0, update_packet);
 }
 
 void MineServer::receive()
 {
     ENetEvent event;
-    while(enet_host_service(host.get(), &event, is_all_set ? 25 : 60000) > 0)
+    while(enet_host_service(host.get(), &event, is_all_set ? 0 : 60000) > 0)
     {
         if(is_all_set)
         {
@@ -455,13 +457,9 @@ void MineServer::receive()
                 printf("Player %d connected.\n", c.idx);
 
                 init.your_id = c.idx;
-                static ENetPacket* init_packet = nullptr;
-                if(init_packet != nullptr)
-                {
-                    enet_packet_destroy(init_packet);
-                }
-                enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE);
-                enet_peer_send(event.peer, 0, init_packet);
+                
+                c.init_packet.reset(enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE));
+                enet_peer_send(event.peer, 0, c.init_packet.get());
 
                 had_first = true;
                 // Store any relevant client information here.
@@ -488,8 +486,8 @@ void MineServer::receive()
                         idx += 1;
                     }
 
-                    auto packet = enet_packet_create(arr.get(), sizeof(LaunchData) * clients.size(), ENET_PACKET_FLAG_RELIABLE);
-                    enet_host_broadcast(host.get(), 0, packet);
+                    first_packet.reset(enet_packet_create(arr.get(), sizeof(LaunchData) * clients.size(), ENET_PACKET_FLAG_RELIABLE));
+                    enet_host_broadcast(host.get(), 0, first_packet.get());
                 }
 
                 // Clean up the packet now that we're done using it.

@@ -47,6 +47,8 @@ struct MineClient {
     State get_state() const;
 
     EnetHostPtr host;
+    // to receive every frame
+    SCPacketData sc_packet;
 
 private:
     void update_counters(enet_uint16 new_bombs, enet_uint16 new_flags, unsigned char new_seconds, unsigned char new_minutes);
@@ -82,7 +84,4 @@ private:
 
     // to send every frame
     CSPacketData cs_packet;
-
-    // to receive every frame
-    SCPacketData sc_packet;
 };
