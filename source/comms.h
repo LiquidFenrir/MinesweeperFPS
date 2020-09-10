@@ -5,9 +5,9 @@
 #include <enet/enet.h>
 #include <glm/glm.hpp>
 
-static constexpr enet_uint16 COMMS_PORT = 37777;
-static inline constexpr size_t MAX_NAME_LEN = 32;
-inline constexpr float TransferScaling =  50.0f;
+inline constexpr enet_uint16 COMMS_PORT = 37777;
+inline constexpr float POS_SCALE = 100000.0f;
+inline constexpr size_t MAX_NAME_LEN = 32;
 inline constexpr float MovementSpeed =  3.75f;
 
 struct EnetHostDeleter {
@@ -42,16 +42,15 @@ struct PacketDataPlayerInit {
 
 // every tick, player sends this
 struct CSPacketData {
-    unsigned char action;
-    unsigned char going_mag;
-    enet_uint16 going_towards;
+    enet_uint32 x, y;
     enet_uint16 yaw, pitch;
+    unsigned char action;
 };
 // and server sends back this
 struct SCPacketData {
-    signed char result;
     enet_uint16 placed_flags;
     unsigned char seconds, minutes;
+    signed char result;
 };
 // followed by NUM_PLAYERS of these
 struct SCPacketDataPlayer {
@@ -77,7 +76,7 @@ struct PlayerData {
     char username[MAX_NAME_LEN];
 
     void fill(const PacketDataPlayerInit& p);
-    void fill(const SCPacketDataPlayer& p, bool ignore_angles = false);
+    void fill(const SCPacketDataPlayer& p, bool ignore_posang = false);
     PacketDataPlayerInit fill_meta() const;
     SCPacketDataPlayer fill_info() const;
 };

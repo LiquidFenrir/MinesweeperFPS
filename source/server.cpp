@@ -290,38 +290,28 @@ void MineServer::update(const float deltatime)
         memcpy(&pitch_int, &pitch_bytes, sizeof(int16_t));
         c.data.pitch = pitch_int;
 
-        const auto going_towards = glm::radians(float(ENET_NET_TO_HOST_16(c.doing.going_towards)) / TransferScaling);
         const auto yaw_rads = glm::radians(float(c.data.yaw));
         const auto pitch_rads = glm::radians(float(c.data.pitch));
 
-        if(c.doing.going_mag)
+        c.data.position[0] = ENET_NET_TO_HOST_32(c.doing.x) / POS_SCALE;
+        c.data.position[2] = ENET_NET_TO_HOST_32(c.doing.y) / POS_SCALE;
+
+        if(c.data.position[0] < 0.5f)
         {
-            glm::vec3 Forward{
-                cosf(yaw_rads),
-                0.0f,
-                sinf(yaw_rads)
-            };
-            glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
+            c.data.position[0] = 0.5f;
+        }
+        else if(c.data.position[0] > width - 0.5f)
+        {
+            c.data.position[0] = width - 0.5f;
+        }
 
-            c.data.position += velocity * (c.doing.going_mag/255.0f) * ((Forward * sinf(going_towards)) + Right * cosf(going_towards));
-
-            if(c.data.position[0] < 0.5f)
-            {
-                c.data.position[0] = 0.5f;
-            }
-            else if(c.data.position[0] > width - 0.5f)
-            {
-                c.data.position[0] = width - 0.5f;
-            }
-
-            if(c.data.position[2] < 0.5f)
-            {
-                c.data.position[2] = 0.5f;
-            }
-            else if(c.data.position[2] > height - 0.5f)
-            {
-                c.data.position[2] = height - 0.5f;
-            }
+        if(c.data.position[2] < 0.5f)
+        {
+            c.data.position[2] = 0.5f;
+        }
+        else if(c.data.position[2] > height - 0.5f)
+        {
+            c.data.position[2] = height - 0.5f;
         }
 
         c.data.looking_at_x = -1;
@@ -371,7 +361,6 @@ void MineServer::update(const float deltatime)
             }
         }
 
-        c.doing.going_mag = 0;
         c.doing.action = 0;
     }
 }
@@ -412,14 +401,19 @@ void MineServer::send_update()
         idx += 1;
     }
 
-    auto update_packet = enet_packet_create(data_to_send.data(), data_to_send.size(), ENET_PACKET_FLAG_RELIABLE);
+    static ENetPacket* update_packet = nullptr;
+    if(update_packet != nullptr)
+    {
+        enet_packet_destroy(update_packet);
+    }
+    update_packet = enet_packet_create(data_to_send.data(), data_to_send.size(), ENET_PACKET_FLAG_RELIABLE);
     enet_host_broadcast(host.get(), 0, update_packet);
 }
 
 void MineServer::receive()
 {
     ENetEvent event;
-    while(enet_host_service(host.get(), &event, is_all_set ? 10 : 60000) > 0)
+    while(enet_host_service(host.get(), &event, is_all_set ? 25 : 60000) > 0)
     {
         if(is_all_set)
         {
@@ -461,7 +455,12 @@ void MineServer::receive()
                 printf("Player %d connected.\n", c.idx);
 
                 init.your_id = c.idx;
-                auto init_packet = enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE);
+                static ENetPacket* init_packet = nullptr;
+                if(init_packet != nullptr)
+                {
+                    enet_packet_destroy(init_packet);
+                }
+                enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE);
                 enet_peer_send(event.peer, 0, init_packet);
 
                 had_first = true;

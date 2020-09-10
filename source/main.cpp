@@ -13,6 +13,10 @@
 #include <memory>
 #include <tuple>
 #include <array>
+#include <algorithm>
+extern "C" {
+    #include <sys/stat.h>
+}
 #ifdef __MINGW32__
 #include "mingw.thread.h"
 #else
@@ -35,6 +39,8 @@
 #include "shader_fsh.glsl.h"
 #include "flat_shader_vsh.glsl.h"
 #include "world_shader_vsh.glsl.h"
+
+#define CONFIG_VERSION "v2"
 
 void glCheckError_(const char *file, int line)
 {
@@ -76,8 +82,7 @@ static int username_callback(ImGuiInputTextCallbackData* data)
 static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
 {
     std::unique_ptr<MineServer> server = std::move(srv_ptr);
-    auto last_int_upd = std::chrono::steady_clock::now();
-    auto last_ext_upd = last_int_upd;
+    auto last_upd = std::chrono::steady_clock::now();
     bool first_tick = true;
     while(!server->should_shutdown())
     {
@@ -85,16 +90,15 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
             auto now = std::chrono::steady_clock::now();
             if(first_tick)
             {
-                last_int_upd = now;
-                last_ext_upd = now;
+                last_upd = now;
                 first_tick = false;
             }
-            server->update(std::chrono::duration<float>{now - last_int_upd}.count());
-            last_int_upd = now;
 
-            if(std::chrono::duration<float>{now - last_ext_upd}.count() >= 0.05f) { // 20 full updates per second
+            if(const float deltaTime = std::chrono::duration<float>{now - last_upd}.count(); deltaTime >= 0.05f) // 20 full updates per second
+            {
+                server->update(deltaTime);
                 server->send_update();
-                last_ext_upd = now;
+                last_upd = now;
             }
         }
         server->receive();
@@ -109,7 +113,7 @@ struct WindowDeleter {
 };
 using WindowPtr = std::unique_ptr<GLFWwindow, WindowDeleter>;
 
-static void do_graphical()
+static void do_graphical(std::string filepath)
 {
     GLFWmonitor* primary = glfwGetPrimaryMonitor();
     int total_resolutions;
@@ -136,7 +140,7 @@ static void do_graphical()
         }
         return s;
     }();
-    const std::vector<const char*> possible_resolutions =[&]() {
+    const std::vector<const char*> possible_resolutions = [&]() {
         std::vector<const char*> v;
         std::string_view sv{possible_resolutions_str};
         for(int i = 0; i < total_resolutions; ++i)
@@ -187,8 +191,8 @@ static void do_graphical()
     glfwSetWindowIcon(window, 1, &icon_image);
 
     glfwSetWindowFocusCallback(window, Focus::callback);
-    // glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
-    // glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
+    glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -285,6 +289,7 @@ static void do_graphical()
     std::array<float, 4> crosshair_color{{
         0.25f, 0.25f, 0.25f, 0.75f
     }};
+
     std::thread server_thread;
     std::unique_ptr<MineClient> client;
 
@@ -311,6 +316,7 @@ static void do_graphical()
     bool fullscreen = false;
 
     float mouse_sensitivity = 3.5f;
+    float fov = 45.0;
     int crosshair_distance = 5;
     int crosshair_width = 8;
     int crosshair_length = 20;
@@ -323,6 +329,60 @@ static void do_graphical()
     int window_x = 0, window_y = 0;
 
     float client_start_time = 0.0f;
+
+    bool modified_config = false;
+    const auto load_config = [&]() {
+        struct stat s;
+        if(stat(filepath.c_str(), &s) < 0)
+        {
+            modified_config = true;
+        }
+        else if(FILE* fh = fopen(filepath.c_str(), "r"); fh != nullptr)
+        {
+            auto buf = std::make_unique<char[]>(s.st_size);
+            size_t rsize = fread(buf.get(), 1, s.st_size, fh);
+            fclose(fh);
+            std::string_view sv(buf.get(), rsize);
+            if(sv.substr(0, 2) == CONFIG_VERSION)
+            {
+                sv = sv.substr(3); // strlen(CONFIG_VERSION + ';')
+                while(sv.size() > 0)
+                {
+                    const char front = sv.front();
+                    sv = sv.substr(2);
+                    const size_t len = sv.find_first_of(';');
+                    const auto val = sv.substr(0, len);
+                    switch(front)
+                    {
+                        case 'n':
+                            memset(username, 0, MAX_NAME_LEN);
+                            strncpy(username, val.data(), std::min(MAX_NAME_LEN, len));
+                            break;
+                        case 'r':
+                            crosshair_color[0] = std::stof(std::string(val));
+                            break;
+                        case 'g':
+                            crosshair_color[1] = std::stof(std::string(val));
+                            break;
+                        case 'b':
+                            crosshair_color[2] = std::stof(std::string(val));
+                            break;
+                        case 'a':
+                            crosshair_color[3] = std::stof(std::string(val));
+                            break;
+                        default:
+                            break;
+                    }
+                    sv = sv.substr(len + 1);
+                }
+            }
+        }
+        else
+        {
+            modified_config = true;
+        }
+    };
+    load_config();
 
     auto last_int_upd = std::chrono::steady_clock::now();
     auto last_ext_upd = last_int_upd;
@@ -354,12 +414,13 @@ static void do_graphical()
         const MineClient::State st = client ? client->get_state() : MineClient::State::NotConnected;
 
         const auto now = std::chrono::steady_clock::now();
+        const auto lastComm = std::chrono::duration<float>{now - last_ext_upd}.count();
         const auto deltaTime = std::chrono::duration<float>{now - last_int_upd}.count();
 
         const auto prev_screen = screen;
         if(screen == MenuScreen::InGame)
         {
-            if(st != MineClient::State::Playing || std::chrono::duration<float>{now - last_ext_upd}.count() >= 0.05f)
+            if(st != MineClient::State::Playing || lastComm >= 0.05f)
             {
                 ENetEvent event;
                 if(client->host && enet_host_service(client->host.get(), &event, 10))
@@ -433,10 +494,12 @@ static void do_graphical()
                     ImGui::SliderInt("Crosshair size", &crosshair_length, 8, 35);
                     ImGui::SliderInt("Crosshair space", &crosshair_distance, 4, 12);
 
-                    ImGui::Spacing();
-                    if(ImGui::Button("Back to game")) in_esc_menu = false;
                     ImGui::Separator();
+                    if(ImGui::Button("Back to game")) in_esc_menu = false;
+                    ImGui::SameLine();
                     if(ImGui::Button("Back to main menu")) client->disconnect(true);
+
+                    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
                     ImGui::End();
 
@@ -450,13 +513,14 @@ static void do_graphical()
                 }
                 else
                 {
-                    if(deltaTime >= 0.0166f/2.0f) // 2 movement updates per 60fps frame
+                    if(deltaTime >= 0.01666f/2.0f)
                     {
                         client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, deltaTime);
                         if(in_esc_menu)
                         {
                             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                         }
+                        last_int_upd = now;
                     }
                 }
             }
@@ -585,8 +649,14 @@ static void do_graphical()
                 ImGui::Begin("Settings", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("Player settings");
-                ImGui::InputText("Player name", username, MAX_NAME_LEN, ImGuiInputTextFlags_CallbackCharFilter, username_callback);
-                ImGui::ColorEdit4("Crosshair color", crosshair_color.data(), ImGuiColorEditFlags_AlphaPreview);
+                if(ImGui::InputText("Player name", username, MAX_NAME_LEN, ImGuiInputTextFlags_CallbackCharFilter, username_callback))
+                {
+                    modified_config = true;
+                }
+                if(ImGui::ColorEdit4("Crosshair color", crosshair_color.data(), ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview))
+                {
+                    modified_config = true;
+                }
 
                 if(total_resolutions > 1)
                 {
@@ -723,16 +793,42 @@ static void do_graphical()
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
 
-        if(client && st == MineClient::State::Playing && deltaTime >= 0.0166f/2.0f)
+        if(client && st == MineClient::State::Playing && lastComm >= 0.05f)
         {
             client->send();
-            last_int_upd = now;
         }
 
         glfwSwapBuffers(window);
     }
 
     if(server_thread.joinable()) server_thread.join();
+
+    if(modified_config)
+    {
+        if(FILE* fh = fopen(filepath.c_str(), "w"); fh != nullptr)
+        {
+            std::string to_write = CONFIG_VERSION;
+            to_write += ';';
+            to_write += "n:";
+            to_write += username;
+            to_write += ';';
+            to_write += "r:";
+            to_write += std::to_string(crosshair_color[0]);
+            to_write += ';';
+            to_write += "g:";
+            to_write += std::to_string(crosshair_color[1]);
+            to_write += ';';
+            to_write += "b:";
+            to_write += std::to_string(crosshair_color[2]);
+            to_write += ';';
+            to_write += "a:";
+            to_write += std::to_string(crosshair_color[3]);
+            to_write += ';';
+
+            fwrite(to_write.c_str(), 1, to_write.size(), fh);
+            fclose(fh);
+        }
+    }
     }
 
     // Cleanup
@@ -788,7 +884,8 @@ int main(int argc, char** argv)
         glfwSetErrorCallback(glfw_error_callback);
         if(glfwInit())
         {
-            do_graphical();
+            std::string confpath = argv[0];
+            do_graphical(confpath + ".cfg");
             glfwTerminate();
         }
     }

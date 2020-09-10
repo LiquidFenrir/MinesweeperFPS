@@ -7,3 +7,8 @@
 #include <glad/glad.h>
 
 #include <GLFW/glfw3.h>
+
+#if GLFW_VERSION_MAJOR < 3
+#error "Need GFLW 3.2+"
+#endif
+
