@@ -270,8 +270,8 @@ namespace {
     {
         Fillers::fill_quad_generic(verts, 0, // +Z
             PDD3{
-                {-0.5f, +0.5f, +0.5f},
-                {+1.0f, 0.0f, 0.0f},
+                {+0.5f, +0.5f, +0.5f},
+                {-1.0f, 0.0f, 0.0f},
                 {0.0f, +1.0f, 0.0f}
             },
         plain_color_uv, solidWhite);
@@ -292,15 +292,15 @@ namespace {
 
         Fillers::fill_quad_generic(verts, 3, // -Z
             PDD3{
-                {+0.5f, -0.5f, -0.5f},
-                {0.0f,+1.0f,0.0f},
-                {+1.0f,0.0f,0.0f}
+                {-0.5f, +0.5f, -0.5f},
+                {+1.0f,0.0f,0.0f},
+                {0.0f,+1.0f,0.0f}
             },
         plain_color_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 4, // +X
             PDD3{
-                {+0.5f, -0.5f, -0.5f},
-                {0.0f,0.0f,+1.0f},
+                {+0.5f, -0.5f, +0.5f},
+                {0.0f,0.0f,-1.0f},
                 {0.0f,-1.0f,0.0f}
             },
         plain_color_uv, solidWhite);
@@ -335,8 +335,8 @@ namespace {
 
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
-                {start_x, start_y, 0.0f},
-                {-width, 0.0f, 0.0f},
+                {start_x - width, start_y, 0.0f},
+                {width, 0.0f, 0.0f},
                 {0.0f, height, 0.0f}
             },
             plain_color_uv, slightlyBlack);
@@ -959,8 +959,6 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
 #if GLFW_VERSION_MAJOR >= 2 && GLFW_VERSION_MINOR >= 3
     if(GLFWgamepadstate state; glfwGetGamepadState(GLFW_JOYSTICK_1, &state) == GLFW_TRUE)
     {
-        fprintf(stderr, "got gamepad 1\n");
-
         if(state.buttons[GLFW_GAMEPAD_BUTTON_START])
         {
             in_esc_menu = true;
@@ -968,25 +966,25 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
             return;
         }
 
-        if(state.buttons[GLFW_GAMEPAD_BUTTON_A])
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER])
         {
             cs_packet.action = 1;
         }
-        if(state.buttons[GLFW_GAMEPAD_BUTTON_B])
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER])
         {
             cs_packet.action = 2;
         }
 
-        #define DEADZONE(ax) state.axes[ax] <= 0.0625f/4.0f ? 0 : state.axes[ax] * 255
+        #define DEADZONE(ax) ((state.axes[ax] <= 0.0625f/2.0f) ? 0 : state.axes[ax])
 
         float x_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_X);
         float y_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_Y);
 
-        going_towards = atan2f(y_move, x_move);
+        going_towards = atan2f(-y_move, x_move);
         going_mag = sqrtf((x_move * x_move) + (y_move * y_move)) * 255;
 
-        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X);
-        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X) * 25;
+        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y) * 25;
 
         #undef DEADZONE
     }
