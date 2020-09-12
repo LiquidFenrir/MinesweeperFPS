@@ -37,11 +37,11 @@ struct MineClient {
     MineClient(const char * server_addr, const std::array<float, 4>& c_c, const char* un);
 
     void set_server_peer(ENetPeer* p);
-    void receive_packet(unsigned char* data, size_t length);
+    void receive_packet(unsigned char* data, size_t length, std::vector<std::unique_ptr<char[]>>& out_chat);
     void disconnect(bool change_state);
     void cancel();
 
-    void handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, const float deltaTime);
+    void handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, bool& released_esc, bool& is_typing, const float deltaTime);
     void render(RenderInfo& info);
     void send();
 
@@ -57,8 +57,9 @@ private:
     glm::mat4 get_top_view_matrix();
     void render_world();
 
-    Framebuffer minimap_frame;
+    Framebuffer minimap_frame, chat_frame;
     Buffer minimap_behind_buf, indicator_buf;
+    Buffer chat_buf, chat_visible_buf;
     Buffer minimap_buf, overlay_buf, crosshair_buf, counters_buf, cursor_buf, player_buf;
     ENetPeer* peer;
     ENetAddress address;
@@ -69,6 +70,7 @@ private:
     bool pressed_m2;
     bool first_mouse;
     float prevx, prevy;
+    bool send_str;
 
     // to send at connection
     std::array<float, 4> my_crosshair_color;

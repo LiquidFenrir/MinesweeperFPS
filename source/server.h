@@ -10,7 +10,6 @@ struct ServClient {
     bool connected = false;
     PlayerData data;
     CSPacketData doing;
-    EnetPacketPtr init_packet;
 };
 
 struct WorldTile {
@@ -64,9 +63,7 @@ private:
 
     SCPacketDataInit init;
     SCPacketData cur_state;
-    EnetPacketPtr first_packet;
-    std::array<EnetPacketPtr, 2> upd_packets;
-    int upd_packet_id;
     time_t start_time;
+    std::string chatted;
     bool generated;
 };

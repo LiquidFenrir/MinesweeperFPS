@@ -12,12 +12,10 @@ void PlayerData::fill(const PacketDataPlayerInit& p)
     };
     memcpy(username, p.username, MAX_NAME_LEN);
 }
-void PlayerData::fill(const SCPacketDataPlayer& p, bool ignore_posang)
+void PlayerData::fill(const SCPacketDataPlayer& p)
 {
     looking_at_x = p.looking_at_x;
     looking_at_y = p.looking_at_y;
-
-    if(ignore_posang) return;
 
     position[0] = ENET_NET_TO_HOST_32(p.x) / POS_SCALE;
     position[2] = ENET_NET_TO_HOST_32(p.y) / POS_SCALE;

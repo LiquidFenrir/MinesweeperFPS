@@ -82,7 +82,8 @@ static int username_callback(ImGuiInputTextCallbackData* data)
 static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
 {
     std::unique_ptr<MineServer> server = std::move(srv_ptr);
-    auto last_upd = std::chrono::steady_clock::now();
+    const auto first_upd = std::chrono::steady_clock::now();
+    auto last_upd = first_upd;
     bool first_tick = true;
     while(!server->should_shutdown())
     {
@@ -94,6 +95,7 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
                 first_tick = false;
             }
 
+            server->receive();
             if(const float deltaTime = std::chrono::duration<float>{now - last_upd}.count(); deltaTime >= 0.05f) // 20 full updates per second
             {
                 server->update(deltaTime);
@@ -101,7 +103,10 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
                 last_upd = now;
             }
         }
-        server->receive();
+        else
+        {
+            server->receive();
+        }
     }
 }
 
@@ -311,9 +316,13 @@ static void do_graphical(std::string filepath)
     const auto extra_window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse;
     bool closed_extra_window = true;
     bool in_esc_menu = false;
+    bool is_typing = false;
+    bool released_esc = false;
     bool first_frame = false;
     bool start_client = false, start_server = false;
     bool fullscreen = false;
+
+   std::vector<std::unique_ptr<char[]>> out_chat;
 
     float mouse_sensitivity = 3.5f;
     int fov = 60;
@@ -389,6 +398,7 @@ static void do_graphical(std::string filepath)
     };
     load_config();
 
+    std::string typed_text;
     auto last_int_upd = std::chrono::steady_clock::now();
     auto last_ext_upd = last_int_upd;
 
@@ -428,7 +438,7 @@ static void do_graphical(std::string filepath)
             if(st != MineClient::State::Playing || lastComm >= 0.05f)
             {
                 ENetEvent event;
-                if(client->host && enet_host_service(client->host.get(), &event, 10))
+                if(client->host && enet_host_service(client->host.get(), &event, 5))
                 {
                     switch(event.type)
                     {
@@ -436,7 +446,7 @@ static void do_graphical(std::string filepath)
                         // connection succeeded
                         break;
                     case ENET_EVENT_TYPE_RECEIVE:
-                        client->receive_packet(event.packet->data, event.packet->dataLength);
+                        client->receive_packet(event.packet->data, event.packet->dataLength, out_chat);
                         // Clean up the packet now that we're done using it.
                         enet_packet_destroy(event.packet);
                         break;
@@ -445,8 +455,6 @@ static void do_graphical(std::string filepath)
                         break;
                     }
                 }
-                if(st == MineClient::State::Playing)
-                    last_ext_upd = now;
             }
 
             if(st == MineClient::State::NotConnected)
@@ -489,17 +497,17 @@ static void do_graphical(std::string filepath)
                     start_imgui_frame();
                     ImGui::Begin("Pause menu", &closed_extra_window, extra_window_flags);
 
-                    ImGui::SliderInt("HUD width", &overlay_w, 5, 45);
-                    ImGui::SliderInt("HUD height", &overlay_h, 10, 90);
-                    ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20);
+                    if(ImGui::SliderInt("HUD width", &overlay_w, 5, 45)) modified_config = true;
+                    if(ImGui::SliderInt("HUD height", &overlay_h, 10, 90)) modified_config = true;
+                    if(ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20)) modified_config = true;
 
                     ImGui::Spacing();
-                    ImGui::SliderInt("Field of View", &fov, 30, 90);
+                    if(ImGui::SliderInt("Field of View", &fov, 30, 90)) modified_config = true;
                     ImGui::Spacing();
-                    ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f);
-                    ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16);
-                    ImGui::SliderInt("Crosshair size", &crosshair_length, 8, 35);
-                    ImGui::SliderInt("Crosshair space", &crosshair_distance, 4, 12);
+                    if(ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair size", &crosshair_length, 8, 35)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair space", &crosshair_distance, 4, 12)) modified_config = true;
 
                     ImGui::Separator();
                     if(ImGui::Button("Back to game")) in_esc_menu = false;
@@ -516,15 +524,28 @@ static void do_graphical(std::string filepath)
                         in_esc_menu = false;
                     }
 
+                    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+                    {
+                        if(released_esc)
+                        {
+                            in_esc_menu = false;
+                            released_esc = false;
+                        }
+                    }
+                    else
+                    {
+                        released_esc = true;
+                    }
                     if(!in_esc_menu) set_controls_for_game();
                 }
                 else
                 {
-                    if(deltaTime >= 0.01666f/2.0f)
+                    if(deltaTime >= 1.0f/60.0f)
                     {
-                        client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, deltaTime);
+                        client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
                         if(in_esc_menu)
                         {
+                            released_esc = false;
                             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                         }
                         last_int_upd = now;
@@ -615,6 +636,8 @@ static void do_graphical(std::string filepath)
         {
             if(start_client)
             {
+                size_t l = strnlen(username, MAX_NAME_LEN);
+                if(l < MAX_NAME_LEN) memset(username + l, 0, MAX_NAME_LEN - l);
                 client = std::make_unique<MineClient>(server_address, crosshair_color, username);
                 client_start_time = glfwGetTime();
                 start_client = false;
@@ -796,20 +819,20 @@ static void do_graphical(std::string filepath)
                 crosshair_distance, crosshair_width, crosshair_length,
                 minimap_scale,
                 overlay_w, overlay_h,
-                fov
+                fov,
             };
             client->render(info);
+            if(lastComm >= 0.10f)
+            {
+                client->send();
+                last_ext_upd = now;
+            }
         }
 
         if((screen == MenuScreen::AfterGame && prev_screen == screen) || (screen != MenuScreen::InGame && screen != MenuScreen::AfterGame) || st != MineClient::State::Playing || in_esc_menu)
         {
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
-
-        if(client && st == MineClient::State::Playing && lastComm >= 0.05f)
-        {
-            client->send();
         }
 
         glfwSwapBuffers(window);
@@ -888,8 +911,6 @@ static void do_server_alone(char** args)
 
 int main(int argc, char** argv)
 {
-    srand(time(NULL));
-
     if(enet_initialize () != 0)
     {
         fprintf(stderr, "An error occurred while initializing ENet.\n");

@@ -70,12 +70,12 @@ public:
 };
 
 namespace {
-    inline const float min_pitch_to_look = -30.0f;
-
     inline constexpr float diam_of_spawn_circle = 7.0f;
     inline constexpr float radius_of_spawn_circle = diam_of_spawn_circle / 2.0f;
     void fill_pos_and_angle_start(PlayerData& p, const int idx, const int players_total, const int width, const int height)
     {
+        p.looking_at_x = -1;
+        p.looking_at_y = -1;
         p.pitch = 0.0f;
         const float center_x = width / 2.0f;
         const float center_y = height / 2.0f;
@@ -88,11 +88,11 @@ namespace {
         {
             const int16_t ang = ((idx / float(players_total)) * 360.0f);
             const auto ang_rads = glm::radians(float(ang));
-            const float x = (sinf(ang_rads) * radius_of_spawn_circle) + center_x;
-            const float y = (cosf(ang_rads) * radius_of_spawn_circle) + center_y;
+            const float x = (cosf(ang_rads) * radius_of_spawn_circle) + center_x;
+            const float y = (sinf(ang_rads) * radius_of_spawn_circle) + center_y;
 
             p.position = {x, 0.0f, y};
-            p.yaw = (ang + 360 - 90) % 360;
+            p.yaw = (ang + 360 + 180) % 360;
         }
     }
 
@@ -137,6 +137,7 @@ namespace {
 
     void generate_bombs(MineInfo& mines, const Coord center)
     {
+        srand(time(NULL));
         const auto size = mines.world.size();
         for(int i = 0; i < mines.bombs; i++)
         {
@@ -251,8 +252,7 @@ is_all_set(false),
 width(map_width), height(map_height), had_first(false),
 bombs(map_width * map_height * bombs_percent / 100.0f),
 world(map_width * map_height), clients(player_amount),
-data_to_send(sizeof(SCPacketData) + (sizeof(SCPacketDataPlayer) * clients.size()) + world.size()),
-upd_packet_id(0),
+data_to_send(sizeof(SCPacketData) + (sizeof(SCPacketDataPlayer) * clients.size()) + world.size() + (MAX_CHAT_LINE_LEN + 1)),
 start_time(0), generated(false)
 {
     /* Bind the server to the default localhost.     */
@@ -315,29 +315,22 @@ void MineServer::update(const float deltatime)
             c.data.position[2] = height - 0.5f;
         }
 
-        c.data.looking_at_x = -1;
-        c.data.looking_at_y = -1;
-
-        if(c.data.pitch <= min_pitch_to_look)
+        if(c.doing.looking_at_x < 0 || c.doing.looking_at_x >= width)
         {
-            const glm::vec3 Front{
-                cosf(yaw_rads) * cosf(pitch_rads),
-                sinf(pitch_rads),
-                sinf(yaw_rads) * cosf(pitch_rads)
-            };
-            const auto floorNormal = glm::vec3(0.0f, 1.0f, 0.0f);
-            const auto floorPos = glm::vec3(0.0f, -1.0f, 0.0f);
-            const float d = glm::dot(floorNormal, Front);
-            if(d != 0.0f)
-            {
-                const float dist = glm::dot(floorNormal, floorPos - c.data.position) / d;
-                auto LookingAt = c.data.position + (Front * dist);
-                if(!(LookingAt[0] < 0 || LookingAt[0] >= width || LookingAt[2] < 0 || LookingAt[2] >= height))
-                {
-                    c.data.looking_at_x = LookingAt[0];
-                    c.data.looking_at_y = LookingAt[2];
-                }
-            }
+            c.data.looking_at_x = -1;
+        }
+        else
+        {
+            c.data.looking_at_x = c.doing.looking_at_x;
+        }
+
+        if(c.doing.looking_at_y < 0 || c.doing.looking_at_y >= height)
+        {
+            c.data.looking_at_y = -1;
+        }
+        else
+        {
+            c.data.looking_at_y = c.doing.looking_at_y;
         }
 
         if(c.doing.action == 2)
@@ -402,20 +395,21 @@ void MineServer::send_update()
         idx += 1;
     }
 
-    upd_packets[upd_packet_id].reset(enet_packet_create(data_to_send.data(), data_to_send.size(), ENET_PACKET_FLAG_RELIABLE));
-    enet_host_broadcast(host.get(), 0, upd_packets[upd_packet_id].get());
-
-    upd_packet_id = 1 - upd_packet_id; // 0 -> 1, 1 -> 0...
-    if(upd_packets[upd_packet_id])
+    if(chatted.size())
     {
-        upd_packets[upd_packet_id].reset();
+        std::copy(chatted.begin(), chatted.end(), data_to_send.begin() + idx);
+        idx += chatted.size();
+        chatted.clear();
     }
+
+    auto upd_packet(enet_packet_create(data_to_send.data(), idx, ENET_PACKET_FLAG_RELIABLE));
+    enet_host_broadcast(host.get(), 1, upd_packet);
 }
 
 void MineServer::receive()
 {
     ENetEvent event;
-    while(enet_host_service(host.get(), &event, is_all_set ? 0 : 60000) > 0)
+    while(enet_host_service(host.get(), &event, is_all_set ? 1 : 60000) > 0)
     {
         if(is_all_set)
         {
@@ -426,7 +420,23 @@ void MineServer::receive()
             } break;
             case ENET_EVENT_TYPE_RECEIVE: {
                 auto& c = clients[*(char*)(event.peer->data)];
+
+                const auto old_action = c.doing.action;
+                const auto old_x = c.doing.looking_at_x;
+                const auto old_y = c.doing.looking_at_y;
                 memcpy(&c.doing, event.packet->data, sizeof(c.doing));
+                if(old_action > c.doing.action)
+                {
+                    c.doing.action = old_action;
+                    c.doing.looking_at_x = old_x;
+                    c.doing.looking_at_y = old_y;
+                }
+                if(event.packet->dataLength > sizeof(c.doing))
+                {
+                    chatted.resize(1 + (event.packet->dataLength - sizeof(c.doing)));
+                    chatted[0] = c.idx;
+                    memcpy(chatted.data() + 1, event.packet->data + sizeof(c.doing), chatted.size() - 1);
+                }
 
                 // Clean up the packet now that we're done using it.
                 enet_packet_destroy(event.packet);
@@ -458,8 +468,8 @@ void MineServer::receive()
 
                 init.your_id = c.idx;
                 
-                c.init_packet.reset(enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE));
-                enet_peer_send(event.peer, 0, c.init_packet.get());
+                auto init_packet(enet_packet_create(&init, sizeof(init), ENET_PACKET_FLAG_RELIABLE));
+                enet_peer_send(event.peer, 0, init_packet);
 
                 had_first = true;
                 // Store any relevant client information here.
@@ -481,13 +491,21 @@ void MineServer::receive()
                     for(auto& cli : clients)
                     {
                         fill_pos_and_angle_start(cli.data, idx, clients.size(), width, height);
+                        memcpy(&cli.doing.pitch, &cli.data.pitch, 2);
+                        memcpy(&cli.doing.yaw, &cli.data.yaw, 2);
+                        cli.doing.pitch = ENET_HOST_TO_NET_16(cli.doing.pitch);
+                        cli.doing.yaw = ENET_HOST_TO_NET_16(cli.doing.yaw);
+                        cli.doing.x = ENET_HOST_TO_NET_32(enet_uint32(cli.data.position[0] * POS_SCALE));
+                        cli.doing.y = ENET_HOST_TO_NET_32(enet_uint32(cli.data.position[2] * POS_SCALE));
+                        cli.doing.action = 0;
+
                         arr[idx].info = cli.data.fill_info();
                         arr[idx].meta = cli.data.fill_meta();
                         idx += 1;
                     }
 
-                    first_packet.reset(enet_packet_create(arr.get(), sizeof(LaunchData) * clients.size(), ENET_PACKET_FLAG_RELIABLE));
-                    enet_host_broadcast(host.get(), 0, first_packet.get());
+                    auto first_packet = enet_packet_create(arr.get(), sizeof(LaunchData) * clients.size(), ENET_PACKET_FLAG_RELIABLE);
+                    enet_host_broadcast(host.get(), 0, first_packet);
                 }
 
                 // Clean up the packet now that we're done using it.

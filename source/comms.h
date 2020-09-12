@@ -5,10 +5,14 @@
 #include <enet/enet.h>
 #include <glm/glm.hpp>
 
+#define mymax(a, b) ((a) > (b) ? (a) : (b))
+
 inline constexpr enet_uint16 COMMS_PORT = 37777;
 inline constexpr float POS_SCALE = 100000.0f;
-inline constexpr size_t MAX_NAME_LEN = 32;
 inline constexpr float MovementSpeed =  3.75f;
+inline constexpr size_t MAX_NAME_LEN = 32;
+inline constexpr size_t MAX_CHAT_LINE_LEN_TXT = 32;
+inline constexpr size_t MAX_CHAT_LINE_LEN = mymax(MAX_CHAT_LINE_LEN_TXT, MAX_NAME_LEN);
 
 struct EnetHostDeleter {
     void operator()(ENetHost* h)
@@ -44,6 +48,7 @@ struct PacketDataPlayerInit {
 struct CSPacketData {
     enet_uint32 x, y;
     enet_uint16 yaw, pitch;
+    signed char looking_at_x, looking_at_y;
     unsigned char action;
 };
 // and server sends back this
@@ -76,7 +81,7 @@ struct PlayerData {
     char username[MAX_NAME_LEN];
 
     void fill(const PacketDataPlayerInit& p);
-    void fill(const SCPacketDataPlayer& p, bool ignore_posang = false);
+    void fill(const SCPacketDataPlayer& p);
     PacketDataPlayerInit fill_meta() const;
     SCPacketDataPlayer fill_info() const;
 };

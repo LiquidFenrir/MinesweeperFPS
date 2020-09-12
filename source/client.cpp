@@ -4,9 +4,12 @@
 
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
+
 namespace {
+    constexpr float min_pitch_to_look = -30.0f;
     constexpr float Overlay_TL_x = -1.0f;
     constexpr float Overlay_TL_y = 1.0f;
     constexpr float MyEpsilon = 0.00006103515625f;
@@ -21,6 +24,23 @@ namespace {
     inline const glm::vec4 solidWhite{1.0f, 1.0f, 1.0f, 1.0f};
     inline const glm::vec4 solidBlack{0.0f, 0.0f, 0.0f, 1.0f};
     inline const glm::vec4 slightlyBlack{0.0f, 0.0f, 0.0f, 0.75f};
+    inline std::string typed_str;
+    inline constexpr size_t MAX_CHAT_LINES = 8;
+
+    void character_callback(GLFWwindow* window, unsigned int codepoint)
+    {
+        bool lc = (codepoint >= 'a' && codepoint <= 'z');
+        bool uc = (codepoint >= 'A' && codepoint <= 'Z');
+        bool di = (codepoint >= '0' && codepoint <= '9');
+        bool sp = codepoint == ' ';
+        if(lc || uc || di || sp)
+        {
+            if(typed_str.size() < MAX_CHAT_LINE_LEN_TXT)
+            {
+                typed_str += char(codepoint);
+            }
+        }
+    }
 
     template<size_t N>
     constexpr std::array<UVArr, N> generate_char_uvs(const std::array<std::pair<int, int>, N>& coords)
@@ -105,6 +125,21 @@ namespace {
                 {0.0f, 0.0f, 0.0f},
                 {1.0f, 0.0f, 0.0f},
                 {0.0f, 128.0f/384.0f, 0.0f}
+            },
+            PDD2{
+                {0.0f, 1.0f},
+                {1.0f, 0.0f},
+                {0.0f, 1.0f},
+            },
+        solidWhite);
+    }
+    void fill_chat_visible(VertexPtr verts)
+    {
+        Fillers::fill_quad_generic(verts, 0,
+            PDD3{
+                {0.0f, 0.0f, 0.0f},
+                {1.0f, 0.0f, 0.0f},
+                {0.0f, 1.0f, 0.0f}
             },
             PDD2{
                 {0.0f, 1.0f},
@@ -201,8 +236,8 @@ namespace {
 
                 Fillers::fill_quad_generic(verts, idx,
                     PDD3{
-                        {x, -1.0f + wall_height, z},
-                        {1.0f, 0.0f, 0.0f},
+                        {x + ((1 - d) * 1) , -1.0f + wall_height, z},
+                        {1.0f * ((d * 2) - 1), 0.0f, 0.0f},
                         {0.0f, wall_height, 0.0f},
                     },
                     wall_uvs,
@@ -219,8 +254,8 @@ namespace {
 
                 Fillers::fill_quad_generic(verts, idx,
                     PDD3{
-                        {x, -1.0f + wall_height, z},
-                        {0.0f, 0.0f, 1.0f},
+                        {x, -1.0f + wall_height, z + (d * -1) + (d * 2) },
+                        {0.0f, 0.0f, -1.0f * ((d * 2) - 1)},
                         {0.0f, wall_height, 0.0f},
                     },
                     wall_uvs,
@@ -432,14 +467,171 @@ namespace {
             solidWhite
         );
     }
+    
+    void fill_chat(VertexPtr verts, const std::vector<std::unique_ptr<char[]>>& lines, const std::vector<PlayerData>& players)
+    {
+        constexpr float start_y = 1.0f;
+        constexpr float height = 2.0f/(MAX_CHAT_LINES + 2);
+        const float delta_x = 2.0f/MAX_CHAT_LINE_LEN;
+        const float start_x = -1.0f;
+
+        size_t idx = MAX_CHAT_LINE_LEN;
+        float x = start_x;
+        float y = start_y;
+
+        auto write_char = [&](const int c, const auto& arr, const auto& col) {
+            const auto [l_u, t_v, del_u, del_v] = arr[c];
+            Fillers::fill_quad_generic(verts, idx, 
+                PDD3{
+                    {x, y, -MyEpsilon},
+                    {delta_x, 0.0f, 0.0f},
+                    {0.0f, height, 0.0f}
+                },
+                PDD2{
+                    {l_u, t_v},
+                    {del_u, 0.0f},
+                    {0.0f, del_v}
+                },
+            col);
+        };
+
+        for(size_t i = MAX_CHAT_LINE_LEN; i < verts.count / 6; ++i)
+        {
+            write_char(0, transparent_uvs_arr, solidWhite);
+            idx += 1;
+        }
+        
+        idx = MAX_CHAT_LINE_LEN;
+        for(auto& ln : lines)
+        {
+            const char usernum = ln[0];
+            const auto col = players[usernum].color;
+            for(size_t i = 0; i < MAX_NAME_LEN; ++i)
+            {
+                const auto c = players[usernum].username[i];
+                if(c == '_')
+                {
+                    write_char(0, underscore_uvs_arr, col);
+                }
+                else if(c == ' ')
+                {
+                    write_char(0, transparent_uvs_arr, col);
+                }
+                else if(c >= '0' && c <= '9')
+                {
+                    write_char(c - '0', number_uvs_arr, col);
+                }
+                else if(c >= 'a' && c <= 'z')
+                {
+                    write_char(c - 'a', lowerc_uvs_arr, col);
+                }
+                else if(c >= 'A' && c <= 'Z')
+                {
+                    write_char(c - 'A', upperc_uvs_arr, col);
+                }
+                x += delta_x;
+                idx += 1;
+            }
+            
+            x = start_x;
+            y -= height;
+            for(size_t i = 1; i <= MAX_CHAT_LINE_LEN_TXT; ++i)
+            {
+                const auto c = ln[i];
+                if(c == ' ')
+                {
+                    write_char(0, transparent_uvs_arr, solidWhite);
+                }
+                else if(c >= '0' && c <= '9')
+                {
+                    write_char(c - '0', number_uvs_arr, solidWhite);
+                }
+                else if(c >= 'a' && c <= 'z')
+                {
+                    write_char(c - 'a', lowerc_uvs_arr, solidWhite);
+                }
+                else if(c >= 'A' && c <= 'Z')
+                {
+                    write_char(c - 'A', upperc_uvs_arr, solidWhite);
+                }
+                x += delta_x;
+                idx += 1;
+            }
+
+            x = start_x;
+            y -= height;
+        }
+
+    }
+
+    void fill_typed(VertexPtr verts)
+    {
+        constexpr float height = 2.0f/(MAX_CHAT_LINES + 2);
+        const float delta_x = 2.0f/MAX_CHAT_LINE_LEN;
+        const float start_x = -1.0f;
+
+        size_t idx = 0;
+        float x = start_x;
+        const float y = -1.0f + height * 2.0f;
+
+        auto write_char = [&](const int c, const auto& arr, const auto& col) {
+            const auto [l_u, t_v, del_u, del_v] = arr[c];
+            Fillers::fill_quad_generic(verts, idx, 
+                PDD3{
+                    {x, y, -MyEpsilon},
+                    {delta_x, 0.0f, 0.0f},
+                    {0.0f, height, 0.0f}
+                },
+                PDD2{
+                    {l_u, t_v},
+                    {del_u, 0.0f},
+                    {0.0f, del_v}
+                },
+            col);
+        };
+
+        for(size_t i = 0; i < MAX_CHAT_LINE_LEN; ++i)
+        {
+            write_char(0, transparent_uvs_arr, solidWhite);
+            x += delta_x;
+            idx += 1;
+        }
+
+        idx = 0;
+        x = start_x;
+        for(const auto c : typed_str)
+        {
+            if(c == ' ')
+            {
+                write_char(0, transparent_uvs_arr, solidWhite);
+            }
+            else if(c >= '0' && c <= '9')
+            {
+                write_char(c - '0', number_uvs_arr, solidWhite);
+            }
+            else if(c >= 'a' && c <= 'z')
+            {
+                write_char(c - 'a', lowerc_uvs_arr, solidWhite);
+            }
+            else if(c >= 'A' && c <= 'Z')
+            {
+                write_char(c - 'A', upperc_uvs_arr, solidWhite);
+            }
+            x += delta_x;
+            idx += 1;
+        }
+    }
 }
 
 MineClient::MineClient(const char * server_addr, const std::array<float, 4>& c_c, const char* un)
 :
 host(enet_host_create(nullptr, 1, 2, 0, 0)),
 minimap_frame(256, 256),
+chat_frame(MAX_CHAT_LINE_LEN * 32, (MAX_CHAT_LINES + 1) * 32),
 minimap_behind_buf(Buffer::Quads(1)),
 indicator_buf(Buffer::Quads(1)),
+chat_buf(Buffer::Quads((MAX_CHAT_LINE_LEN * MAX_CHAT_LINES) + MAX_CHAT_LINE_LEN)),
+chat_visible_buf(Buffer::Quads(1)),
 minimap_buf(Buffer::Quads(1)),
 overlay_buf(Buffer::Quads(1)),
 crosshair_buf(Buffer::Quads(1)),
@@ -447,7 +639,10 @@ counters_buf(Buffer::Quads(5 + 4 + 4)),
 cursor_buf(Buffer::Quads(1)),
 player_buf(Buffer::Quads(7)),
 current_state(MineClient::State::NotConnected),
+pressed_m1(false),
+pressed_m2(false),
 first_mouse(true),
+send_str(false),
 my_crosshair_color(c_c),
 username(un)
 {
@@ -458,6 +653,8 @@ username(un)
     fill_minimap_behind(minimap_behind_buf.getAllVerts());
     fill_overlay(overlay_buf.getAllVerts());
     fill_player(player_buf.getAllVerts());
+    fill_chat_visible(chat_visible_buf.getAllVerts());
+    fill_typed(chat_buf.getAllVerts());
 
     if(server_addr[0] == '\0')
     {
@@ -473,7 +670,7 @@ username(un)
     cs_packet.action = 0;
 }
 
-void MineClient::receive_packet(unsigned char* data, size_t length)
+void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<std::unique_ptr<char[]>>& out_chat)
 {
     if(current_state == MineClient::State::NotConnected)
     {
@@ -495,8 +692,8 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         out.cross_a = 255 * my_crosshair_color[3];
         memcpy(out.username, username, sizeof(out.username));
 
-        auto packet = enet_packet_create(&out, sizeof(out), ENET_PACKET_FLAG_RELIABLE);
-        enet_peer_send(peer, 0, packet);
+        auto send_packet(enet_packet_create(&out, sizeof(out), ENET_PACKET_FLAG_RELIABLE));
+        enet_peer_send(peer, 0, send_packet);
         enet_host_flush(host.get());
 
         current_state = MineClient::State::Waiting;
@@ -550,12 +747,32 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         for(auto& player : players)
         {
             memcpy(&in, data + offset, sizeof(in));
-            player.fill(in, idx == my_player_id);
+            if(idx != my_player_id)
+            {
+                player.fill(in);
+            }
             offset += sizeof(in);
             idx += 1;
         }
 
         memcpy(world.data(), data + offset, world.size());
+        offset += world.size();
+        if(offset < length)
+        {
+            if(out_chat.size() == (MAX_CHAT_LINES / 2))
+            {
+                std::rotate(out_chat.begin(), out_chat.begin() + 1, out_chat.end());
+            }
+            else
+            {
+                out_chat.push_back(std::make_unique<char[]>(MAX_CHAT_LINE_LEN + 2));
+            }
+            char* write_to = out_chat.back().get();
+            memset(write_to, 0, MAX_CHAT_LINE_LEN + 2);
+            memcpy(write_to, data + offset, length - offset);
+            fill_chat(chat_buf.getAllVerts(), out_chat, players);
+        }
+
         render_world();
         fill_counters(counters_buf.getAllVerts(), sc_packet, 0, false);
     }
@@ -617,7 +834,7 @@ void MineClient::cancel()
     current_state = MineClient::State::Cancelled;
 }
 
-void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, const float deltaTime)
+void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, bool& released_esc, bool& is_typing, const float deltaTime)
 {
     if(!Focus::is_focused) return;
 
@@ -625,9 +842,73 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
 
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     {
-        in_esc_menu = true;
-        first_mouse = true;
-        return;
+        if(released_esc)
+        {
+            if(is_typing)
+            {
+            
+                glfwSetCharCallback(window, nullptr);
+                is_typing = false;
+            }
+            else
+            {
+                in_esc_menu = true;
+                first_mouse = true;
+            }
+            return;
+        }
+    }
+    else
+    {
+        released_esc = true;
+    }
+
+    static bool released_enter = true;
+    if(glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        if(released_enter)
+        {
+            released_enter = false;
+            if(is_typing)
+            {
+                glfwSetCharCallback(window, nullptr);
+                is_typing = false;
+                send_str = !typed_str.empty();
+            }
+            else
+            {
+                is_typing = true;
+                glfwSetCharCallback(window, character_callback);
+            }
+        }
+    }
+    else
+    {
+        released_enter = true;
+    }
+    
+    static bool released_bp = true;
+    if(glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS)
+    {
+        if(released_bp)
+        {
+            released_bp = false;
+            if(typed_str.size())
+            {
+                typed_str.pop_back();
+            }
+        }
+    }
+    else
+    {
+        released_bp = true;
+    }
+
+    static size_t prev_typed_size = 0;
+    if(typed_str.size() != prev_typed_size)
+    {
+        prev_typed_size = typed_str.size();
+        fill_typed(chat_buf.getAllVerts());
     }
 
     double xpos, ypos;
@@ -725,7 +1006,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     int16_t pitch = playa.pitch;
     memcpy(&cs_packet.pitch, &pitch, sizeof(int16_t));
 
-    if(going_mag == 0)
+    if(going_mag == 0 && !is_typing)
     {
         going_mag = 4 | 1;
         if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -751,9 +1032,9 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         }
     }
 
+    const auto yaw_rads = glm::radians(float(yaw));
     if(going_mag != 0)
     {
-        const auto yaw_rads = glm::radians(float(yaw));
         glm::vec3 Forward{
             cos(yaw_rads),
             0.0f,
@@ -781,12 +1062,39 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
             playa.position[2] = height - 0.5f;
         }
     }
+
+    playa.looking_at_x = -1;
+    playa.looking_at_y = -1;
+
+    if(playa.pitch <= min_pitch_to_look)
+    {
+        const auto pitch_rads = glm::radians(float(playa.pitch));
+        const glm::vec3 Front{
+            cosf(yaw_rads) * cosf(pitch_rads),
+            sinf(pitch_rads),
+            sinf(yaw_rads) * cosf(pitch_rads)
+        };
+        const auto floorNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+        const auto floorPos = glm::vec3(0.0f, -1.0f, 0.0f);
+        const float d = glm::dot(floorNormal, Front);
+        if(d != 0.0f)
+        {
+            const float dist = glm::dot(floorNormal, floorPos - playa.position) / d;
+            auto LookingAt = playa.position + (Front * dist);
+            if(!(LookingAt[0] < 0 || LookingAt[0] >= width || LookingAt[2] < 0 || LookingAt[2] >= height))
+            {
+                playa.looking_at_x = LookingAt[0];
+                playa.looking_at_y = LookingAt[2];
+            }
+        }
+    }
 }
 
 void MineClient::render(RenderInfo& info)
 {
     const auto& self = players[my_player_id];
 
+    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
     // bind textures on corresponding texture units
@@ -859,10 +1167,18 @@ void MineClient::render(RenderInfo& info)
         buf.draw();
     }
 
+    glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     info.flatShader.use();
     info.flatShader.setMat4("model", glm::mat4(1.0f));
     info.flatShader.setVec4("constColor", solidWhite);
+
+    chat_frame.bind();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    chat_buf.bind();
+    chat_buf.draw();
 
     minimap_frame.bind();
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
@@ -910,6 +1226,17 @@ void MineClient::render(RenderInfo& info)
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, info.display_w, info.display_h);
+
+    chat_frame.bindOutput();
+
+
+    model = glm::translate(glm::mat4(1.0f), glm::vec3{1.0f - (info.overlay_w / 50.0f), -1.0f + ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 0.0f});
+    model = glm::scale(model, glm::vec3{info.overlay_w / 50.0f, ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 1.0f});
+    info.flatShader.setMat4("model", model);
+    
+    chat_visible_buf.bind();
+    chat_visible_buf.draw();
+
     minimap_frame.bindOutput();
 
     model = glm::translate(glm::mat4(1.0f), glm::vec3{Overlay_TL_x, Overlay_TL_y, 0.0f});
@@ -965,14 +1292,26 @@ void MineClient::send()
 {
     if(host)
     {
-        cs_packet.x = ENET_HOST_TO_NET_32(enet_uint32(players[my_player_id].position[0] * POS_SCALE));
-        cs_packet.y = ENET_HOST_TO_NET_32(enet_uint32(players[my_player_id].position[2] * POS_SCALE));
+    const size_t s = sizeof(cs_packet) + (send_str ? typed_str.size() : 0);
+    auto buf = std::make_unique<char[]>(s);
+        const auto& playa = players[my_player_id];
+        cs_packet.x = ENET_HOST_TO_NET_32(enet_uint32(playa.position[0] * POS_SCALE));
+        cs_packet.y = ENET_HOST_TO_NET_32(enet_uint32(playa.position[2] * POS_SCALE));
         cs_packet.yaw = ENET_HOST_TO_NET_16(cs_packet.yaw);
         cs_packet.pitch = ENET_HOST_TO_NET_16(cs_packet.pitch);
+        cs_packet.looking_at_x = playa.looking_at_x;
+        cs_packet.looking_at_y = playa.looking_at_y;
 
-        auto packet = enet_packet_create(&cs_packet, sizeof(cs_packet), 0);
-        enet_peer_send(peer, 0, packet);
-        enet_host_flush(host.get());
+        memcpy(buf.get(), &cs_packet, sizeof(cs_packet));
+        if(send_str)
+        {
+            std::copy(typed_str.begin(), typed_str.end(), buf.get() + sizeof(cs_packet));
+            typed_str.clear();
+            send_str = false;
+        }
+
+        auto send_packet(enet_packet_create(buf.get(), s, 0));
+        enet_peer_send(peer, 0, send_packet);
 
         cs_packet.action = 0;
 
