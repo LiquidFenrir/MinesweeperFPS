@@ -1,6 +1,6 @@
 build-nix/
 build-win/
-build-msvc/
 .vscode/
-MinesweeperFPS
+MinesweeperFPS.cfg
 MinesweeperFPS.exe
+MinesweeperFPS.exe.cfg

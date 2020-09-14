@@ -1,4 +1,4 @@
-.PHONY: desktop all clean clean-win clean-nix win nix
+.PHONY: all clean clean-win clean-nix win nix
 
 all: win nix
 	@echo "Built all."
