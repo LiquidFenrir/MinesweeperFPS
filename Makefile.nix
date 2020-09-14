@@ -20,35 +20,4 @@ INC_FLAGS   :=	$(addprefix -I,$(INC_DIRS))
 CPPFLAGS    :=	$(INC_FLAGS) -MMD -MP
 LDFLAGS     :=	-Wl,--gc-sections $(addprefix -l,$(WANTLIBS)) -pthread
 
-.PHONY:	all clean
-
-all: $(TARGET)
-	@echo Compilation complete
-
-clean:
-	@echo "Cleaning..."
-	@rm -rf $(BUILD) $(TARGET)
-	@echo "Done!"
-
-$(TARGET): $(DATAS_H) $(OBJS)
-	$(CXX) -o $@ $(OBJS) $(LDFLAGS)
-
-# c source
-$(BUILD)/%.c.o: %.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-
-# c++ source
-$(BUILD)/%.cpp.o: %.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/%.png.h: %.png
-	@mkdir -p $(dir $@)
-	@python3 converter.py $@ $<
-
-$(BUILD)/%.glsl.h: %.glsl
-	@mkdir -p $(dir $@)
-	@python3 converter.py $@ $<
-
--include $(DEPS)
+-include Makefile.base
