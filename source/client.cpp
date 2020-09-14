@@ -49,7 +49,6 @@ namespace {
 
         constexpr float delta_u = 0.0625f;
         constexpr float delta_v = 0.125f;
-        constexpr float delta_y = 0.125f;
         constexpr float extra_u = 8.0f / 1024.0f;
         constexpr float extra_v = 8.0f / 512.0f;
 
@@ -123,7 +122,7 @@ namespace {
         Fillers::fill_quad_generic(verts, 0,
             PDD3{
                 {0.0f, 0.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 128.0f/384.0f, 0.0f}
             },
             PDD2{
@@ -138,8 +137,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0,
             PDD3{
                 {0.0f, 0.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
                 {0.0f, 1.0f},
@@ -169,8 +168,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {0.0f, 0.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
                 {0.0f, 0.75f},
@@ -185,7 +184,7 @@ namespace {
         Fillers::fill_quad_generic(verts, 0,
             PDD3{
                 {0.0f, -1.0f + MyEpsilon * 2.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f},
             },
             PDD2{
@@ -201,8 +200,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {-0.5f, 0.5f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             plain_color_uv,
             solidWhite
@@ -266,12 +265,12 @@ namespace {
         }
     }
 
-    void fill_player(VertexPtr verts)
+    void fill_cube(VertexPtr verts)
     {
         Fillers::fill_quad_generic(verts, 0, // +Z
             PDD3{
                 {+0.5f, +0.5f, +0.5f},
-                {-1.0f, 0.0f, 0.0f},
+                {-1, 0, 0},
                 {0.0f, +1.0f, 0.0f}
             },
         plain_color_uv, solidWhite);
@@ -285,16 +284,16 @@ namespace {
         Fillers::fill_quad_generic(verts, 2, // +Y
             PDD3{
                 {-0.5f, +0.5f, +0.5f},
-                {+1.0f, 0.0f, 0.0f},
+                {+1, 0, 0},
                 {0.0f, 0.0f, +1.0f}
             },
         plain_color_uv, solidWhite);
 
         Fillers::fill_quad_generic(verts, 3, // -Z
             PDD3{
-                {-0.5f, +0.5f, -0.5f},
-                {+1.0f,0.0f,0.0f},
-                {0.0f,+1.0f,0.0f}
+                {-0.5f,-0.5f, -0.5f},
+                {0.0f,+1.0f,0.0f},
+                {-1.0f,0.0f,0.0f}
             },
         plain_color_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 4, // +X
@@ -311,20 +310,24 @@ namespace {
                 {+1.0f,0.0f,0.0f}
             },
         plain_color_uv, solidWhite);
+    }
 
+    void fill_player_face(VertexPtr verts)
+    {
         const PDD2 eye_uv{
-            {0.125f, 1.0f},
-            {0.125f, 0.0f},
-            {0.0f, 0.25f}
+            {0.125f + 0.125f, 1.0f},
+            {0.0f, -0.25f},
+            {0.125f, 0.0f}
         };
-        Fillers::fill_quad_generic(verts, 6,  // -Z
+        Fillers::fill_quad_generic(verts, 0,
             PDD3{
-                {-0.5f, +0.5f, -0.5f - MyEpsilon},
+                {+0.5f,+0.5f, -0.5f - MyEpsilon},
+                {0.0f,-1.0f,0.0f},
                 {+1.0f,0.0f,0.0f},
-                {0.0f,+1.0f,0.0f}
             },
         eye_uv, solidBlack);
     }
+
     void fill_name(VertexPtr verts, std::string_view name)
     {
         constexpr float start_y = 1.25f - 0.0625f;
@@ -386,7 +389,7 @@ namespace {
             idx += 1;
         }
     }
-    void fill_counters(VertexPtr verts, const SCPacketData& info, const int bombs, const bool first_time)
+    void fill_counters(VertexPtr verts, const ServerWorldPacket& info, const int bombs, const bool first_time)
     {
         constexpr float timer_y = 128.0f / 384.0f;
         constexpr float delta_y = 50.0f / 384.0f;
@@ -456,8 +459,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {-0.5f, 0.5f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
                 {0.0625f + (MyEpsilon*2.0f), 1.0f - 0.125f - (MyEpsilon*2.0f)},
@@ -495,12 +498,26 @@ namespace {
             col);
         };
 
-        for(size_t i = MAX_CHAT_LINE_LEN; i < verts.count / 6; ++i)
+        for(size_t i = MAX_CHAT_LINE_LEN, j = 0; i < verts.count / 6; ++i)
         {
             write_char(0, transparent_uvs_arr, solidWhite);
             idx += 1;
+
+            j++;
+            if(j == MAX_CHAT_LINE_LEN)
+            {
+                x = start_x;
+                y -= height;
+                j = 0;
+            }
+            else
+            {
+                x += delta_x;
+            }
         }
         
+        x = start_x;
+        y = start_y;
         idx = MAX_CHAT_LINE_LEN;
         for(auto& ln : lines)
         {
@@ -637,7 +654,8 @@ overlay_buf(Buffer::Quads(1)),
 crosshair_buf(Buffer::Quads(1)),
 counters_buf(Buffer::Quads(5 + 4 + 4)),
 cursor_buf(Buffer::Quads(1)),
-player_buf(Buffer::Quads(7)),
+cube_buf(Buffer::Quads(6)),
+player_face_buf(Buffer::Quads(1)),
 current_state(MineClient::State::NotConnected),
 pressed_m1(false),
 pressed_m2(false),
@@ -652,7 +670,8 @@ username(un)
     fill_minimap(minimap_buf.getAllVerts());
     fill_minimap_behind(minimap_behind_buf.getAllVerts());
     fill_overlay(overlay_buf.getAllVerts());
-    fill_player(player_buf.getAllVerts());
+    fill_cube(cube_buf.getAllVerts());
+    fill_player_face(player_face_buf.getAllVerts());
     fill_chat_visible(chat_visible_buf.getAllVerts());
     fill_typed(chat_buf.getAllVerts());
 
@@ -674,8 +693,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
 {
     if(current_state == MineClient::State::NotConnected)
     {
-        // length == sizeof(SCPacketDataInit)
-        SCPacketDataInit in;
+        ServerWorldPacketInit in;
         memcpy(&in, data, sizeof(in));
 
         players.resize(in.players);
@@ -685,7 +703,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
         height = in.height;
         total_bombs = ENET_NET_TO_HOST_16(in.bombs);
 
-        PacketDataPlayerInit out;
+        PlayerMetaPacket out;
         out.cross_r = 255 * my_crosshair_color[0];
         out.cross_g = 255 * my_crosshair_color[1];
         out.cross_b = 255 * my_crosshair_color[2];
@@ -701,7 +719,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
     else if(current_state == MineClient::State::Waiting)
     {
         size_t offset = 0;
-        LaunchData in;
+        StartDataPacket in;
         for(auto& player : players)
         {
             memcpy(&in, data + offset, sizeof(in));
@@ -721,7 +739,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
         lower_world_buf = std::make_unique<Buffer>(Buffer::Quads(width * height));
         upper_world_buf = std::make_unique<Buffer>(Buffer::Quads(width * height));
         render_world();
-        fill_counters(counters_buf.getAllVerts(), SCPacketData{0,0,0,0}, total_bombs, true);
+        fill_counters(counters_buf.getAllVerts(), ServerWorldPacket{0,0,0,0}, total_bombs, true);
 
         current_state = MineClient::State::Playing;
     }
@@ -742,7 +760,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
         }
 
         size_t offset = sizeof(sc_packet);
-        SCPacketDataPlayer in;
+        ServerPlayerPacket in;
         unsigned char idx = 0;
         for(auto& player : players)
         {
@@ -836,6 +854,40 @@ void MineClient::cancel()
 
 void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, bool& released_esc, bool& is_typing, const float deltaTime)
 {
+    {
+    size_t idx = 0;
+    for(auto& p : players)
+    {
+        auto i = idx++;
+        if(i == my_player_id) continue;
+
+        if((roundf(p.movedDistance * 100.0f) / 100.0f) == 0.0f)
+        {
+            fprintf(stderr, "Player %zd is not moving, swinging back\n", i);
+            if(std::fabs(p.movementSwing) > ((SwingSpeed * 0.25f) * deltaTime))
+            {
+                p.currentSwingDirection = std::copysign(SwingSpeed, p.movementSwing);
+                p.movementSwing -= p.currentSwingDirection * deltaTime;
+            }
+            if(std::fabs(p.movementSwing) <= ((SwingSpeed * 0.25f) * deltaTime))
+            {
+                p.currentSwingDirection = SwingSpeed;
+                p.movementSwing = 0.0f;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "Player %zd is moving!! SWANGIN\n", i);
+            p.movementSwing += p.currentSwingDirection * deltaTime;
+            if(std::fabs(p.movementSwing) >= MaxSwingAmplitude)
+            {
+                p.currentSwingDirection = -p.currentSwingDirection;
+                p.movementSwing = std::copysign(MaxSwingAmplitude, p.movementSwing);
+            }
+        }
+    }
+    }
+
     if(!Focus::is_focused) return;
 
     const float velocity = MovementSpeed * deltaTime;
@@ -983,8 +1035,8 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         going_towards = atan2f(-y_move, x_move);
         going_mag = sqrtf((x_move * x_move) + (y_move * y_move)) * 255;
 
-        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X) * 25;
-        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y) * 25;
+        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X) * (display_w/2.0f);
+        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y) * (display_h/2.0f);
 
         #undef DEADZONE
     }
@@ -1038,7 +1090,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
             0.0f,
             sin(yaw_rads)
         };
-        glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
+        glm::vec3 Right = glm::normalize(glm::cross(Forward, {0, 1, 0}));
 
         playa.position += velocity * (going_mag / 255.0f) * ((Forward * sinf(going_towards)) + Right * cosf(going_towards));
 
@@ -1072,7 +1124,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
             sinf(pitch_rads),
             sinf(yaw_rads) * cosf(pitch_rads)
         };
-        const auto floorNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+        const auto floorNormal = glm::vec3(0, 1, 0);
         const auto floorPos = glm::vec3(0.0f, -1.0f, 0.0f);
         const float d = glm::dot(floorNormal, Front);
         if(d != 0.0f)
@@ -1136,23 +1188,79 @@ void MineClient::render(RenderInfo& info)
         }
     }
 
-    player_buf.bind();
     for(unsigned char i = 0; i < players.size(); ++i)
     {
         if(i == my_player_id) continue;
 
         const auto& playa = players[i];
+
         info.worldShader.setVec4("constColor", playa.color);
-        model = glm::translate(glm::mat4(1.0f), playa.position);
-        model = glm::rotate(model, glm::radians(-(float(playa.yaw) + 90.0f)), glm::vec3{0.0f, 1.0f, 0.0f});
-        model = glm::rotate(model, glm::radians(float(playa.pitch)), glm::vec3{1.0f, 0.0f, 0.0f});
+
+        const auto playerSpinMat = glm::rotate(glm::translate(glm::mat4(1.0f), playa.position), glm::radians(-(float(playa.yaw) + 90.0f)), glm::vec3{0, 1, 0});
+
+        cube_buf.bind();
+
+        model = glm::translate(playerSpinMat, glm::vec3{0.0f, -0.35f, 0.0f});
+        model = glm::scale(model, glm::vec3{0.25f, 0.45f, 0.125f});
+        
         info.worldShader.setMat4("model", model);
-        player_buf.draw();
+        cube_buf.draw();
+
+        const auto swingRads = glm::radians(playa.movementSwing);
+
+        model = playerSpinMat;
+        auto armMat = model;
+
+        model = armMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + (0.45f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{+(0.125f + 0.0625f), 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), -sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+        
+        model = armMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + (0.45f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{-(0.125f + 0.0625f), 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        model = playerSpinMat;
+        auto legMat = model;
+
+        model = legMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + 0.45f + (0.425f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{+0.0625f, 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+        
+        model = legMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + 0.45f + (0.425f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{-0.0625f, 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), -sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        model = glm::rotate(playerSpinMat, glm::radians(float(playa.pitch)), glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.25f, 0.25f, 0.25f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        player_face_buf.bind();
+        player_face_buf.draw();
     }
 
     info.worldShader.setVec4("constColor", solidWhite);
 
-    const float my_player_inv_yaw_rads = glm::radians(-(float(self.yaw) + 45.0f));
     for(unsigned char i = 0; i < players.size(); ++i)
     {
         if(i == my_player_id) continue;
@@ -1179,7 +1287,7 @@ void MineClient::render(RenderInfo& info)
     chat_buf.draw();
 
     minimap_frame.bind();
-    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClearColor(0, 1, 0, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     minimap_behind_buf.bind();
@@ -1227,11 +1335,10 @@ void MineClient::render(RenderInfo& info)
 
     chat_frame.bindOutput();
 
-
     model = glm::translate(glm::mat4(1.0f), glm::vec3{1.0f - (info.overlay_w / 50.0f), -1.0f + ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 0.0f});
     model = glm::scale(model, glm::vec3{info.overlay_w / 50.0f, ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 1.0f});
     info.flatShader.setMat4("model", model);
-    
+
     chat_visible_buf.bind();
     chat_visible_buf.draw();
 
@@ -1290,8 +1397,8 @@ void MineClient::send()
 {
     if(host)
     {
-    const size_t s = sizeof(cs_packet) + (send_str ? typed_str.size() : 0);
-    auto buf = std::make_unique<char[]>(s);
+        const size_t s = sizeof(cs_packet) + (send_str ? typed_str.size() : 0);
+        auto buf = std::make_unique<char[]>(s);
         const auto& playa = players[my_player_id];
         cs_packet.x = ENET_HOST_TO_NET_32(enet_uint32(playa.position[0] * POS_SCALE));
         cs_packet.y = ENET_HOST_TO_NET_32(enet_uint32(playa.position[2] * POS_SCALE));
@@ -1310,6 +1417,7 @@ void MineClient::send()
 
         auto send_packet(enet_packet_create(buf.get(), s, 0));
         enet_peer_send(peer, 0, send_packet);
+        enet_host_flush(host.get());
 
         cs_packet.action = 0;
 
@@ -1338,7 +1446,7 @@ glm::mat4 MineClient::get_view_matrix()
     const auto Front = glm::normalize(front);
 
     // also re-calculate the Right and Up vector
-    const auto Right = glm::normalize(glm::cross(Front, glm::vec3(0.0f, 1.0f, 0.0f)));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+    const auto Right = glm::normalize(glm::cross(Front, glm::vec3(0, 1, 0)));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
     const auto Up    = glm::normalize(glm::cross(Right, Front));
 
     return glm::lookAt(self.position, self.position + Front, Up);
@@ -1396,12 +1504,12 @@ void MineClient::render_world()
 
             const PDD3 pos_upper{
                 {x_l, -1.0f + MyEpsilon, t_y},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f}
             };
             const PDD3 pos_lower{
                 {x_l, -1.0f, t_y},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f}
             };
             const PDD2 upper_uv{

@@ -47,9 +47,9 @@ struct MineClient {
 
     State get_state() const;
 
-    EnetHostPtr host;
+    ENetHostPtr host;
     // to receive every frame
-    SCPacketData sc_packet;
+    ServerWorldPacket sc_packet;
 
 private:
     void update_counters(enet_uint16 new_bombs, enet_uint16 new_flags, unsigned char new_seconds, unsigned char new_minutes);
@@ -60,7 +60,8 @@ private:
     Framebuffer minimap_frame, chat_frame;
     Buffer minimap_behind_buf, indicator_buf;
     Buffer chat_buf, chat_visible_buf;
-    Buffer minimap_buf, overlay_buf, crosshair_buf, counters_buf, cursor_buf, player_buf;
+    Buffer minimap_buf, overlay_buf, crosshair_buf, counters_buf, cursor_buf;
+    Buffer cube_buf, player_face_buf;
     ENetPeer* peer;
     ENetAddress address;
 
@@ -86,5 +87,5 @@ private:
     unsigned char my_player_id;
 
     // to send every frame
-    CSPacketData cs_packet;
+    ClientPlayerPacket cs_packet;
 };

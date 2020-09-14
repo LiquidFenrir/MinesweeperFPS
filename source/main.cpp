@@ -40,7 +40,7 @@ extern "C" {
 #include "flat_shader_vsh.glsl.h"
 #include "world_shader_vsh.glsl.h"
 
-#define CONFIG_VERSION "v2"
+#define CONFIG_VERSION "v02"
 
 void glCheckError_(const char *file, int line)
 {
@@ -95,18 +95,15 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
                 first_tick = false;
             }
 
-            server->receive();
-            if(const float deltaTime = std::chrono::duration<float>{now - last_upd}.count(); deltaTime >= 0.05f) // 20 full updates per second
+            if(const float deltaTime = std::chrono::duration<float>{now - last_upd}.count(); deltaTime >= TIME_PER_TICK * 2.0f)
             {
                 server->update(deltaTime);
                 server->send_update();
                 last_upd = now;
             }
         }
-        else
-        {
-            server->receive();
-        }
+
+        server->receive();
     }
 }
 
@@ -155,7 +152,7 @@ static void do_graphical(std::string filepath)
         }
         return v;
     }();
-    int current_resolution = total_resolutions - 1;
+    int current_resolution = 0;
 
     // Decide GL+GLSL versions
     // GL 3.0 + GLSL 330
@@ -169,7 +166,7 @@ static void do_graphical(std::string filepath)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    const auto [initial_w, initial_h] = resolution_results.back();
+    const auto [initial_w, initial_h] = resolution_results[current_resolution];
     // Create window with graphics context
     WindowPtr window_holder(glfwCreateWindow(initial_w, initial_h, "MinesweeperFPS v1.1", nullptr, nullptr));
     if(!window_holder)
@@ -341,6 +338,7 @@ static void do_graphical(std::string filepath)
 
     bool modified_config = false;
     const auto load_config = [&]() {
+        fprintf(stderr, "Attempting to load config from: '%s'\n", filepath.c_str());
         struct stat s;
         if(stat(filepath.c_str(), &s) < 0)
         {
@@ -354,7 +352,7 @@ static void do_graphical(std::string filepath)
             std::string_view sv(buf.get(), rsize);
             if(sv.substr(0, 2) == CONFIG_VERSION)
             {
-                sv = sv.substr(3); // strlen(CONFIG_VERSION + ';')
+                sv = sv.substr(4); // strlen(CONFIG_VERSION) + 1 for ';'
                 while(sv.size() > 0)
                 {
                     const char front = sv.front();
@@ -435,10 +433,10 @@ static void do_graphical(std::string filepath)
         const auto prev_screen = screen;
         if(screen == MenuScreen::InGame)
         {
-            if(st != MineClient::State::Playing || lastComm >= 0.05f)
+            if(st != MineClient::State::Playing || lastComm >= TIME_PER_TICK)
             {
                 ENetEvent event;
-                if(client->host && enet_host_service(client->host.get(), &event, 5))
+                if(client->host && enet_host_service(client->host.get(), &event, 1))
                 {
                     switch(event.type)
                     {
@@ -542,7 +540,7 @@ static void do_graphical(std::string filepath)
                 {
                     if(deltaTime >= 1.0f/60.0f)
                     {
-                        client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
+                        client->handle_events(window, mouse_sensitivity/25.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
                         if(in_esc_menu)
                         {
                             released_esc = false;
@@ -819,10 +817,10 @@ static void do_graphical(std::string filepath)
                 crosshair_distance, crosshair_width, crosshair_length,
                 minimap_scale,
                 overlay_w, overlay_h,
-                fov,
+                fov
             };
             client->render(info);
-            if(lastComm >= 0.10f)
+            if(lastComm >= (TIME_PER_TICK * 2.0f))
             {
                 client->send();
                 last_ext_upd = now;

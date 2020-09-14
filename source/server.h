@@ -2,6 +2,7 @@
 
 #include "comms.h"
 #include <vector>
+#include <string>
 #include <ctime>
 
 struct ServClient {
@@ -9,7 +10,7 @@ struct ServClient {
     bool set = false;
     bool connected = false;
     PlayerData data;
-    CSPacketData doing;
+    ClientPlayerPacket doing;
 };
 
 struct WorldTile {
@@ -58,11 +59,11 @@ private:
     std::vector<WorldTile> world;
     std::vector<ServClient> clients;
     std::vector<unsigned char> data_to_send;
-    EnetHostPtr host;
+    ENetHostPtr host;
     ENetAddress address;
 
-    SCPacketDataInit init;
-    SCPacketData cur_state;
+    ServerWorldPacketInit init;
+    ServerWorldPacket cur_state;
     time_t start_time;
     std::string chatted;
     bool generated;

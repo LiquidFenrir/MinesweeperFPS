@@ -7,11 +7,6 @@ Uses OpenGL, GLFW, GLM, Dear ImGui, ENet, and mingw-std-threads for c++11 thread
 
 Requirements: Python 3 and the Pillow module for converting data files into headers
 
-For Switch, on any OS:  
-- get devkitA64 from https://devkitpro.org  
-- use pacman to get the `switch-glfw`, `switch-glm`, and `switch-enet` packages  
-- `make switch` in the root of the repo  
-
 For Linux, on Linux (Tested on Debian 10):  
 - get gcc (or clang, probably works too, untested)  
 - get the development packages for libglm, libglfw3, libenet from your favourite package manager  
@@ -23,11 +18,7 @@ For Windows 64-bit, on Linux (Tested on Debian 10):
 
 For Windows 64-bit, on Windows:  
 - MSYS2's Mingw-w64 64bit x86_64-w64-gcc works. Same instructions as Windows build on Linux, but in the Mingw-w64 64bit shell  
-- MSVC (tested with v142 and Visual Studio 2019) (NOTE: Rebuilds entire project every time)  
-  - Launch a Developer PowerShell  
-  - Set it to x64 mode using the vcvarsall.bat script provided by Visual Studio  
-  - Navigate to the root of the repo  
-  - Run the `compile_msvc.ps1` script  
+- MSVC crashes on the generated spritesheet header.  
 
 ## License
 

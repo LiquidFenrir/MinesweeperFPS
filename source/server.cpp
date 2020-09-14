@@ -1,7 +1,5 @@
 #include "server.h"
 
-#include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -76,7 +74,7 @@ namespace {
     {
         p.looking_at_x = -1;
         p.looking_at_y = -1;
-        p.pitch = 0.0f;
+        p.pitch = 0;
         const float center_x = width / 2.0f;
         const float center_y = height / 2.0f;
         if(players_total == 1)
@@ -87,7 +85,7 @@ namespace {
         else
         {
             const int16_t ang = ((idx / float(players_total)) * 360.0f);
-            const auto ang_rads = glm::radians(float(ang));
+            const auto ang_rads = (ang * 3.14159265f)/180.0f;
             const float x = (cosf(ang_rads) * radius_of_spawn_circle) + center_x;
             const float y = (sinf(ang_rads) * radius_of_spawn_circle) + center_y;
 
@@ -252,7 +250,7 @@ is_all_set(false),
 width(map_width), height(map_height), had_first(false),
 bombs(map_width * map_height * bombs_percent / 100.0f),
 world(map_width * map_height), clients(player_amount),
-data_to_send(sizeof(SCPacketData) + (sizeof(SCPacketDataPlayer) * clients.size()) + world.size() + (MAX_CHAT_LINE_LEN + 1)),
+data_to_send(sizeof(ServerWorldPacket) + (sizeof(ServerPlayerPacket) * clients.size()) + world.size() + (MAX_CHAT_LINE_LEN + 1)),
 start_time(0), generated(false)
 {
     /* Bind the server to the default localhost.     */
@@ -276,7 +274,6 @@ start_time(0), generated(false)
 
 void MineServer::update(const float deltatime)
 {
-    const float velocity = MovementSpeed * deltatime;
     for(auto& c : clients)
     {
         if(!c.connected) continue;
@@ -290,9 +287,6 @@ void MineServer::update(const float deltatime)
         int16_t pitch_int = 0;
         memcpy(&pitch_int, &pitch_bytes, sizeof(int16_t));
         c.data.pitch = pitch_int;
-
-        const auto yaw_rads = glm::radians(float(c.data.yaw));
-        const auto pitch_rads = glm::radians(float(c.data.pitch));
 
         c.data.position[0] = ENET_NET_TO_HOST_32(c.doing.x) / POS_SCALE;
         c.data.position[2] = ENET_NET_TO_HOST_32(c.doing.y) / POS_SCALE;
@@ -379,7 +373,7 @@ void MineServer::send_update()
     sc.placed_flags = ENET_HOST_TO_NET_16(sc.placed_flags);
     memcpy(&data_to_send[0], &sc, sizeof(sc));
 
-    SCPacketDataPlayer curdata;
+    ServerPlayerPacket curdata;
     size_t idx = sizeof(sc);
     for(const auto& c : clients)
     {
@@ -404,12 +398,13 @@ void MineServer::send_update()
 
     auto upd_packet(enet_packet_create(data_to_send.data(), idx, ENET_PACKET_FLAG_RELIABLE));
     enet_host_broadcast(host.get(), 1, upd_packet);
+    enet_host_flush(host.get());
 }
 
 void MineServer::receive()
 {
     ENetEvent event;
-    while(enet_host_service(host.get(), &event, is_all_set ? 1 : 60000) > 0)
+    while(enet_host_service(host.get(), &event, is_all_set ? 0 : 60000) > 0)
     {
         if(is_all_set)
         {
@@ -421,10 +416,13 @@ void MineServer::receive()
             case ENET_EVENT_TYPE_RECEIVE: {
                 auto& c = clients[*(char*)(event.peer->data)];
 
+                ClientPlayerPacket cpp;
+                memcpy(&cpp, event.packet->data, sizeof(cpp));
+
                 const auto old_action = c.doing.action;
                 const auto old_x = c.doing.looking_at_x;
                 const auto old_y = c.doing.looking_at_y;
-                memcpy(&c.doing, event.packet->data, sizeof(c.doing));
+                c.doing = cpp;
                 if(old_action > c.doing.action)
                 {
                     c.doing.action = old_action;
@@ -443,7 +441,7 @@ void MineServer::receive()
             } break;
             case ENET_EVENT_TYPE_DISCONNECT: {
                 auto& c = clients[*(char*)(event.peer->data)];
-                printf("Player %d disconnected.\n", c.idx);
+                fprintf(stderr, "Player %d disconnected.\n", c.idx);
                 c.connected = false;
                 /* Reset the peer's client information. */
                 event.peer->data = nullptr;
@@ -457,14 +455,14 @@ void MineServer::receive()
             case ENET_EVENT_TYPE_CONNECT: {
                 const auto current = find_not_connected();
                 if(current == -1) {
-                    printf("Impossible to connect\n");
+                    fprintf(stderr, "Impossible to connect\n");
                     return;
                 }
 
                 auto& c = clients[current];
                 c.connected = true;
                 c.idx = current;
-                printf("Player %d connected.\n", c.idx);
+                fprintf(stderr, "Player %d connected.\n", c.idx);
 
                 init.your_id = c.idx;
                 
@@ -478,7 +476,7 @@ void MineServer::receive()
             case ENET_EVENT_TYPE_RECEIVE: {
                 {
                     auto& c = clients[*(char*)(event.peer->data)];
-                    PacketDataPlayerInit in;
+                    PlayerMetaPacket in;
                     memcpy(&in, event.packet->data, sizeof(in));
                     c.data.fill(in);
                     c.set = true;
@@ -486,7 +484,7 @@ void MineServer::receive()
 
                 if((is_all_set = all_set()))
                 {
-                    auto arr = std::make_unique<LaunchData[]>(clients.size());
+                    auto arr = std::make_unique<StartDataPacket[]>(clients.size());
                     size_t idx = 0;
                     for(auto& cli : clients)
                     {
@@ -504,7 +502,7 @@ void MineServer::receive()
                         idx += 1;
                     }
 
-                    auto first_packet = enet_packet_create(arr.get(), sizeof(LaunchData) * clients.size(), ENET_PACKET_FLAG_RELIABLE);
+                    auto first_packet = enet_packet_create(arr.get(), sizeof(StartDataPacket) * clients.size(), ENET_PACKET_FLAG_RELIABLE);
                     enet_host_broadcast(host.get(), 0, first_packet);
                 }
 
@@ -513,7 +511,7 @@ void MineServer::receive()
             } break;
             case ENET_EVENT_TYPE_DISCONNECT: { // impossible?
                 auto& c = clients[*(char*)(event.peer->data)];
-                printf("Player %d disconnected before start of the game.\n", c.idx);
+                fprintf(stderr, "Player %d disconnected before start of the game.\n", c.idx);
                 c.connected = false;
                 c.set = false;
                 // Reset the peer's client information.

@@ -1,12 +1,9 @@
-.PHONY: desktop all clean clean-switch clean-win clean-nix win nix switch 
+.PHONY: desktop all clean clean-win clean-nix win nix
 
-desktop: win nix
-	@echo "Built all desktop versions."
-
-all: win nix switch
+all: win nix
 	@echo "Built all."
 
-clean: clean-win clean-nix clean-switch
+clean: clean-win clean-nix
 	@echo "Cleaned all."
 
 clean-win:
@@ -20,9 +17,3 @@ clean-nix:
 
 nix:
 	$(MAKE) -f Makefile.nix
-
-clean-switch:
-	$(MAKE) -f Makefile.switch clean
-
-switch:
-	$(MAKE) -f Makefile.switch
