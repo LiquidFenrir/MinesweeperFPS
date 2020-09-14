@@ -47,9 +47,8 @@ class VertexPtr {
     #endif
 
     const unsigned VBO;
-    const size_t count;
-
 public:
+    const size_t count;
 
     VertexPtr(const unsigned v, const size_t cnt);
     // make sure to tell OpenGL we're done with the pointer

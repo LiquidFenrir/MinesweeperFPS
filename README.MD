@@ -1,21 +1,24 @@
 # MinesweeperFPS
 
 Is a recreation of regular Minesweeper, but in 3D (view, not map), and with a networked Co-op mode (works across operating systems too) !  
-Uses OpenGL, GLFW, GLM, Dear ImGui, ENet, and mingw-std-threads for c++11 threads on windows.  
+Uses OpenGL, GLFW, GLM, Dear ImGui, ENet, and mingw-std-threads for c++11 threads on windows when using MinGW.  
 
 ## Compilation
 
 Requirements: Python 3 and the Pillow module for converting data files into headers
 
-For Linux:
-- get gcc (or clang, probably works too) and the development packages for libglm, libglfw3, libenet, then `make nix` in the root of the repo. Tested on Debian 10.  
+For Linux, on Linux (Tested on Debian 10):  
+- get gcc (or clang, probably works too, untested)  
+- get the development packages for libglm, libglfw3, libenet from your favourite package manager  
+- `make nix` in the root of the repo  
 
-For Windows, on Linux:  
-- get mingw targetting x86_64-w64, then `make win` in the root of the repo. Tested on Debian 10.  
+For Windows 64-bit, on Linux (Tested on Debian 10):  
+- get mingw targetting x86_64-w64 from your favourite package manager  
+- then `make win` in the root of the repo. 
 
-For Windows, on Windows:  
-- MSYS2's mingw-w64-gcc might work? Untested.  
-- MSVC with Visual Studio's Makefile thing? Might work if you replace the libraries in `extra-libs/libs/` to the correct ones, as the bundled ones are for MinGW ? Untested.  
+For Windows 64-bit, on Windows:  
+- MSYS2's Mingw-w64 64bit x86_64-w64-gcc works. Same instructions as Windows build on Linux, but in the Mingw-w64 64bit shell  
+- MSVC crashes on the generated spritesheet header.  
 
 ## License
 

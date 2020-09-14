@@ -1,6 +1,8 @@
 #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
-#include "graphics_includes.h"
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 #include <enet/enet.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -11,12 +13,18 @@
 #include <memory>
 #include <tuple>
 #include <array>
-#ifdef _WIN32
+#include <algorithm>
+extern "C" {
+    #include <sys/stat.h>
+}
+#ifdef __MINGW32__
 #include "mingw.thread.h"
 #else
 #include <thread>
 #endif
 #include <chrono>
+
+#include "graphics_includes.h"
 
 #include "globjects.h"
 #include "focus.h"
@@ -31,6 +39,8 @@
 #include "shader_fsh.glsl.h"
 #include "flat_shader_vsh.glsl.h"
 #include "world_shader_vsh.glsl.h"
+
+#define CONFIG_VERSION "v02"
 
 void glCheckError_(const char *file, int line)
 {
@@ -56,9 +66,13 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+static bool check_username_char_valid(const char c)
+{
+    return (c == '_' || c== ' ' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
+}
 static int username_callback(ImGuiInputTextCallbackData* data)
 {
-    if(auto c = data->EventChar; !(c == '_' || c== ' ' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
+    if(auto c = data->EventChar; !check_username_char_valid(c))
     {
         return 1;
     }
@@ -68,8 +82,8 @@ static int username_callback(ImGuiInputTextCallbackData* data)
 static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
 {
     std::unique_ptr<MineServer> server = std::move(srv_ptr);
-    auto last_int_upd = std::chrono::steady_clock::now();
-    auto last_ext_upd = last_int_upd;
+    const auto first_upd = std::chrono::steady_clock::now();
+    auto last_upd = first_upd;
     bool first_tick = true;
     while(!server->should_shutdown())
     {
@@ -77,39 +91,20 @@ static void server_thread_func(std::unique_ptr<MineServer>&& srv_ptr)
             auto now = std::chrono::steady_clock::now();
             if(first_tick)
             {
-                last_int_upd = now;
-                last_ext_upd = now;
+                last_upd = now;
                 first_tick = false;
             }
-            server->update(std::chrono::duration<float>{now - last_int_upd}.count());
-            last_int_upd = now;
 
-            if(std::chrono::duration<float>{now - last_ext_upd}.count() >= (0.03125f/2.0f)) {
+            if(const float deltaTime = std::chrono::duration<float>{now - last_upd}.count(); deltaTime >= TIME_PER_TICK * 2.0f)
+            {
+                server->update(deltaTime);
                 server->send_update();
-                last_ext_upd = now;
+                last_upd = now;
             }
         }
+
         server->receive();
     }
-}
-
-static void fill_tri(VertexPtr verts)
-{
-    verts[0] = Vertex{
-        {-0.5f, 0.5f, 0.0f},
-        {0.0f, 1.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f}
-    };
-    verts[1] = Vertex{
-        {+0.5f, 0.5f, 0.0f},
-        {0.0625f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f}
-    };
-    verts[2] = Vertex{
-        {0.0f, -0.5f, 0.0f},
-        {0.0625f, 0.875f},
-        {0.0f, 0.0f, 1.0f, 1.0f}
-    };
 }
 
 struct WindowDeleter {
@@ -120,36 +115,60 @@ struct WindowDeleter {
 };
 using WindowPtr = std::unique_ptr<GLFWwindow, WindowDeleter>;
 
-static void do_graphical()
+static void do_graphical(std::string filepath)
 {
-    
-    constexpr int total_resolutions = 5;
-    constexpr const char* possible_resolutions[total_resolutions] = {
-        "1920x1080",
-        "1600x900",
-        "1366x768",
-        "1280x720",
-        "1024x768"
-    };
-    constexpr const std::pair<int, int> resolution_results[total_resolutions] = {
-        {1920, 1080},
-        {1600, 900},
-        {1366, 768},
-        {1280, 720},
-        {1024, 768}
-    };
-    int current_resolution = total_resolutions - 1;
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    int total_resolutions;
+    const GLFWvidmode* m = glfwGetVideoModes(primary, &total_resolutions);
+
+    std::vector<std::pair<int, int>> resolution_results;
+    for(auto mp = m; mp != m + total_resolutions; ++mp)
+    {
+        const auto& m = *mp;
+        auto p = std::make_pair(m.width, m.height);
+        if(std::find(resolution_results.cbegin(), resolution_results.cend(), p) == resolution_results.cend())
+        {
+            resolution_results.push_back(std::move(p));
+        }
+    }
+    total_resolutions = resolution_results.size();
+
+    std::sort(resolution_results.begin(), resolution_results.end());
+    const std::string possible_resolutions_str = [&]() {
+        std::string s;
+        for(const auto& [w, h] : resolution_results)
+        {
+            s += std::to_string(w) + "x" + std::to_string(h) + '\0';
+        }
+        return s;
+    }();
+    const std::vector<const char*> possible_resolutions = [&]() {
+        std::vector<const char*> v;
+        std::string_view sv{possible_resolutions_str};
+        for(int i = 0; i < total_resolutions; ++i)
+        {
+            v.push_back(sv.data());
+            sv.remove_prefix(sv.find('\0', 3) + 1);
+        }
+        return v;
+    }();
+    int current_resolution = 0;
 
     // Decide GL+GLSL versions
     // GL 3.0 + GLSL 330
+    #ifndef __SWITCH__
     const char* glsl_version = "#version 330 core";
+    #else
+    const char* glsl_version = "#version 300 es";
+    #endif
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
+    const auto [initial_w, initial_h] = resolution_results[current_resolution];
     // Create window with graphics context
-    WindowPtr window_holder(glfwCreateWindow(resolution_results[current_resolution].first, resolution_results[current_resolution].second, "MinesweeperFPS", nullptr, nullptr));
+    WindowPtr window_holder(glfwCreateWindow(initial_w, initial_h, "MinesweeperFPS v1.1", nullptr, nullptr));
     if(!window_holder)
         return;
 
@@ -174,8 +193,8 @@ static void do_graphical()
     glfwSetWindowIcon(window, 1, &icon_image);
 
     glfwSetWindowFocusCallback(window, Focus::callback);
-    // glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
-    // glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
+    glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -186,8 +205,7 @@ static void do_graphical()
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    // io.FontGlobalScale = 1.0f;
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -205,6 +223,7 @@ static void do_graphical()
     Shader flatShader(flat_vsh_shader, fsh_shader);
 
     const auto& [tex_width, tex_height, tex_data] = Images::spritesheet;
+    glActiveTexture(GL_TEXTURE0);
     Texture spritesheet(tex_width, tex_height, tex_data.data());
 
     flatShader.use();
@@ -212,16 +231,67 @@ static void do_graphical()
     worldShader.use();
     worldShader.setInt("texture1", 0);
 
-    auto tribuf = Buffer::Tris(1);
-    fill_tri(tribuf.getAllVerts());
+    char username[MAX_NAME_LEN + 1] = {0};
+    const auto set_username = [](char* usr) {
+        #ifdef __SWITCH__
+        Result rc = accountInitialize(AccountServiceType_Application);
+        if(R_FAILED(rc)) return;
 
-    char username[MAX_NAME_LEN] = {0};
-    strncpy(username, "Player", MAX_NAME_LEN - 1);
+        AccountUid userID={0};
+        AccountProfile profile;
+        AccountUserData userdata;
+        AccountProfileBase profilebase;
+
+        rc = accountGetPreselectedUser(&userID);
+        if(R_SUCCEEDED(rc))
+        {
+            rc = accountGetProfile(&profile, userID);
+            if(R_SUCCEEDED(rc))
+            {
+                rc = accountProfileGet(&profile, &userdata, &profilebase);//userdata is otional, see libnx acc.h.
+                if(R_SUCCEEDED(rc))
+                {
+                    for(size_t i = 0, o = 0; i < MAX_NAME_LEN; ++i)
+                    {
+                        const char c = profilebase.nickname[i];
+                        if(c & 0x80) // remove all utf-8 characters, only ascii here
+                        {
+                            if(c & 0x40)
+                            {
+                                ++i;
+                                if(c & 0x20)
+                                {
+                                    ++i;
+                                    if(c & 0x10)
+                                    {
+                                        ++i;
+                                    }
+                                }
+                            }
+                        }
+                        else if(check_username_char_valid(c)) // and even then, only a subset of ascii (alphanumeric + _ + space)
+                        {
+                            usr[o] = c;
+                            ++o;
+                        }
+                    }
+                }
+
+                accountProfileClose(&profile);
+            }
+        }
+        accountExit();
+        #endif
+
+        if(usr[0] == 0) strncpy(usr, "Player", MAX_NAME_LEN);
+    };
+    set_username(username);
     char server_address[2048] = {0};
 
     std::array<float, 4> crosshair_color{{
         0.25f, 0.25f, 0.25f, 0.75f
     }};
+
     std::thread server_thread;
     std::unique_ptr<MineClient> client;
 
@@ -243,11 +313,16 @@ static void do_graphical()
     const auto extra_window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse;
     bool closed_extra_window = true;
     bool in_esc_menu = false;
+    bool is_typing = false;
+    bool released_esc = false;
     bool first_frame = false;
     bool start_client = false, start_server = false;
     bool fullscreen = false;
 
+   std::vector<std::unique_ptr<char[]>> out_chat;
+
     float mouse_sensitivity = 3.5f;
+    int fov = 60;
     int crosshair_distance = 5;
     int crosshair_width = 8;
     int crosshair_length = 20;
@@ -260,6 +335,70 @@ static void do_graphical()
     int window_x = 0, window_y = 0;
 
     float client_start_time = 0.0f;
+
+    bool modified_config = false;
+    const auto load_config = [&]() {
+        fprintf(stderr, "Attempting to load config from: '%s'\n", filepath.c_str());
+        struct stat s;
+        if(stat(filepath.c_str(), &s) < 0)
+        {
+            modified_config = true;
+        }
+        else if(FILE* fh = fopen(filepath.c_str(), "r"); fh != nullptr)
+        {
+            auto buf = std::make_unique<char[]>(s.st_size);
+            size_t rsize = fread(buf.get(), 1, s.st_size, fh);
+            fclose(fh);
+            std::string_view sv(buf.get(), rsize);
+            if(sv.substr(0, 2) == CONFIG_VERSION)
+            {
+                sv = sv.substr(4); // strlen(CONFIG_VERSION) + 1 for ';'
+                while(sv.size() > 0)
+                {
+                    const char front = sv.front();
+                    sv = sv.substr(2);
+                    const size_t len = sv.find_first_of(';');
+                    const auto val = sv.substr(0, len);
+
+                    constexpr auto convert_to_float = [](auto val) { return std::stof(std::string(val)); };
+                    constexpr auto convert_to_int = [](auto val) { return std::stoi(std::string(val)); };
+                    switch(front)
+                    {
+                        case 'n':
+                            memset(username, 0, MAX_NAME_LEN);
+                            strncpy(username, val.data(), std::min(MAX_NAME_LEN, len));
+                            break;
+                        #define MAP_TO(constant, out, conv) case constant: out = conv(val); break;
+                        MAP_TO('r', crosshair_color[0], convert_to_float)
+                        MAP_TO('g', crosshair_color[1], convert_to_float)
+                        MAP_TO('b', crosshair_color[2], convert_to_float)
+                        MAP_TO('a', crosshair_color[3], convert_to_float)
+                        MAP_TO('S', mouse_sensitivity, convert_to_float)
+                        MAP_TO('d', crosshair_distance, convert_to_int)
+                        MAP_TO('w', crosshair_width, convert_to_int)
+                        MAP_TO('l', crosshair_length, convert_to_int)
+                        MAP_TO('W', overlay_w, convert_to_int)
+                        MAP_TO('H', overlay_h, convert_to_int)
+                        MAP_TO('Z', minimap_scale, convert_to_int)
+                        MAP_TO('F', fov, convert_to_int)
+                        #undef MAP_TO
+                        default:
+                            break;
+                    }
+                    sv = sv.substr(len + 1);
+                }
+            }
+        }
+        else
+        {
+            modified_config = true;
+        }
+    };
+    load_config();
+
+    std::string typed_text;
+    auto last_int_upd = std::chrono::steady_clock::now();
+    auto last_ext_upd = last_int_upd;
 
     // Main loop
     while(!glfwWindowShouldClose(window))
@@ -287,25 +426,32 @@ static void do_graphical()
         };
         const MineClient::State st = client ? client->get_state() : MineClient::State::NotConnected;
 
+        const auto now = std::chrono::steady_clock::now();
+        const auto lastComm = std::chrono::duration<float>{now - last_ext_upd}.count();
+        const auto deltaTime = std::chrono::duration<float>{now - last_int_upd}.count();
+
         const auto prev_screen = screen;
         if(screen == MenuScreen::InGame)
         {
-            ENetEvent event;
-            if(client->host && enet_host_service(client->host.get(), &event, 10))
+            if(st != MineClient::State::Playing || lastComm >= TIME_PER_TICK)
             {
-                switch(event.type)
+                ENetEvent event;
+                if(client->host && enet_host_service(client->host.get(), &event, 1))
                 {
-                case ENET_EVENT_TYPE_CONNECT:
-                    // connection succeeded
-                    break;
-                case ENET_EVENT_TYPE_RECEIVE:
-                    client->receive_packet(event.packet->data, event.packet->dataLength);
-                    // Clean up the packet now that we're done using it.
-                    enet_packet_destroy(event.packet);
-                    break;
-                case ENET_EVENT_TYPE_DISCONNECT:
-                    client->disconnect(true);
-                    break;
+                    switch(event.type)
+                    {
+                    case ENET_EVENT_TYPE_CONNECT:
+                        // connection succeeded
+                        break;
+                    case ENET_EVENT_TYPE_RECEIVE:
+                        client->receive_packet(event.packet->data, event.packet->dataLength, out_chat);
+                        // Clean up the packet now that we're done using it.
+                        enet_packet_destroy(event.packet);
+                        break;
+                    case ENET_EVENT_TYPE_DISCONNECT:
+                        client->disconnect(true);
+                        break;
+                    }
                 }
             }
 
@@ -349,20 +495,24 @@ static void do_graphical()
                     start_imgui_frame();
                     ImGui::Begin("Pause menu", &closed_extra_window, extra_window_flags);
 
-                    ImGui::SliderInt("HUD width", &overlay_w, 5, 45);
-                    ImGui::SliderInt("HUD height", &overlay_h, 10, 90);
-                    ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20);
+                    if(ImGui::SliderInt("HUD width", &overlay_w, 5, 45)) modified_config = true;
+                    if(ImGui::SliderInt("HUD height", &overlay_h, 10, 90)) modified_config = true;
+                    if(ImGui::SliderInt("Minimap zoom", &minimap_scale, 0, 20)) modified_config = true;
 
                     ImGui::Spacing();
-                    ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f);
-                    ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16);
-                    ImGui::SliderInt("Crosshair size", &crosshair_length, 8, 35);
-                    ImGui::SliderInt("Crosshair space", &crosshair_distance, 4, 12);
-
+                    if(ImGui::SliderInt("Field of View", &fov, 30, 90)) modified_config = true;
                     ImGui::Spacing();
-                    if(ImGui::Button("Back to game")) in_esc_menu = false;
+                    if(ImGui::SliderFloat("Mouse sensitivity", &mouse_sensitivity, 0.5f, 5.0f)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair thickness", &crosshair_width, 4, 16)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair size", &crosshair_length, 8, 35)) modified_config = true;
+                    if(ImGui::SliderInt("Crosshair space", &crosshair_distance, 4, 12)) modified_config = true;
+
                     ImGui::Separator();
+                    if(ImGui::Button("Back to game")) in_esc_menu = false;
+                    ImGui::SameLine();
                     if(ImGui::Button("Back to main menu")) client->disconnect(true);
+
+                    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
                     ImGui::End();
 
@@ -372,14 +522,31 @@ static void do_graphical()
                         in_esc_menu = false;
                     }
 
+                    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+                    {
+                        if(released_esc)
+                        {
+                            in_esc_menu = false;
+                            released_esc = false;
+                        }
+                    }
+                    else
+                    {
+                        released_esc = true;
+                    }
                     if(!in_esc_menu) set_controls_for_game();
                 }
                 else
                 {
-                    client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu);
-                    if(in_esc_menu)
+                    if(deltaTime >= 1.0f/60.0f)
                     {
-                        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                        client->handle_events(window, mouse_sensitivity/25.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
+                        if(in_esc_menu)
+                        {
+                            released_esc = false;
+                            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                        }
+                        last_int_upd = now;
                     }
                 }
             }
@@ -415,6 +582,9 @@ static void do_graphical()
                 ImGui::Begin("You lost to the mines!", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("What a shame, you didn't win this time! Better luck on the next one.");
+                ImGui::Text("Loss in %02d min%s %02d second%s",
+                            client->sc_packet.minutes, client->sc_packet.minutes == 1 ? "" : "s",
+                            client->sc_packet.seconds, client->sc_packet.seconds == 1 ? "" : "s");
 
                 ImGui::Separator();
                 if(ImGui::Button("Back to main menu")) exit_lambda();
@@ -428,6 +598,9 @@ static void do_graphical()
                 ImGui::Begin("You won!", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("Congratulations! Maybe challenge yourself with a bigger field?");
+                ImGui::Text("Victory in %02d min%s %02d second%s",
+                            client->sc_packet.minutes, client->sc_packet.minutes == 1 ? "" : "s",
+                            client->sc_packet.seconds, client->sc_packet.seconds == 1 ? "" : "s");
 
                 ImGui::Separator();
                 if(ImGui::Button("Back to main menu")) exit_lambda();
@@ -461,6 +634,8 @@ static void do_graphical()
         {
             if(start_client)
             {
+                size_t l = strnlen(username, MAX_NAME_LEN);
+                if(l < MAX_NAME_LEN) memset(username + l, 0, MAX_NAME_LEN - l);
                 client = std::make_unique<MineClient>(server_address, crosshair_color, username);
                 client_start_time = glfwGetTime();
                 start_client = false;
@@ -484,7 +659,7 @@ static void do_graphical()
 
             if(screen == MenuScreen::Main)
             {
-                ImGui::Begin("Welcome to MinesweeperFPS!", nullptr, main_window_flags);
+                ImGui::Begin("Welcome to MinesweeperFPS v1.1!", nullptr, main_window_flags);
 
                 ImGui::Text("This is a clone of Minesweeper, where you play in a first person view!");
                 ImGui::Text("It also supports playing with friends, to make large maps easier.");
@@ -508,33 +683,42 @@ static void do_graphical()
                 ImGui::Begin("Settings", &closed_extra_window, extra_window_flags);
 
                 ImGui::Text("Player settings");
-                ImGui::InputText("Player name", username, IM_ARRAYSIZE(username), ImGuiInputTextFlags_CallbackCharFilter, username_callback);
-                ImGui::ColorEdit4("Crosshair color", crosshair_color.data(), ImGuiColorEditFlags_AlphaPreview);
-
-                ImGui::Spacing();
-                ImGui::Text("Graphics settings");
-                if(ImGui::Checkbox("Fullscreen", &fullscreen))
+                if(ImGui::InputText("Player name", username, MAX_NAME_LEN, ImGuiInputTextFlags_CallbackCharFilter, username_callback))
                 {
-                    if(fullscreen)
-                    {
-                        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-                        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-                        glfwGetWindowPos(window, &window_x, &window_y);
-                        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 60);
-                    }
-                    else
-                    {
-                        const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
-                        glfwSetWindowMonitor(window, nullptr, window_x, window_y, resolution_x, resolution_y, 60);
-                    }
+                    modified_config = true;
+                }
+                if(ImGui::ColorEdit4("Crosshair color", crosshair_color.data(), ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview))
+                {
+                    modified_config = true;
                 }
 
-                if(!fullscreen)
+                if(total_resolutions > 1)
                 {
-                    if(ImGui::Combo("Resolution", &current_resolution, possible_resolutions, total_resolutions))
+                    ImGui::Spacing();
+                    ImGui::Text("Graphics settings");
+                    if(ImGui::Checkbox("Fullscreen", &fullscreen))
                     {
-                        const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
-                        glfwSetWindowSize(window, resolution_x, resolution_y);
+                        if(fullscreen)
+                        {
+                            GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+                            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+                            glfwGetWindowPos(window, &window_x, &window_y);
+                            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 60);
+                        }
+                        else
+                        {
+                            const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
+                            glfwSetWindowMonitor(window, nullptr, window_x, window_y, resolution_x, resolution_y, 60);
+                        }
+                    }
+
+                    if(!fullscreen)
+                    {
+                        if(ImGui::Combo("Resolution", &current_resolution, possible_resolutions.data(), total_resolutions))
+                        {
+                            const auto& [resolution_x, resolution_y] = resolution_results[current_resolution];
+                            glfwSetWindowSize(window, resolution_x, resolution_y);
+                        }
                     }
                 }
 
@@ -632,9 +816,15 @@ static void do_graphical()
                 worldShader, flatShader, spritesheet, display_w, display_h,
                 crosshair_distance, crosshair_width, crosshair_length,
                 minimap_scale,
-                overlay_w, overlay_h
+                overlay_w, overlay_h,
+                fov
             };
             client->render(info);
+            if(lastComm >= (TIME_PER_TICK * 2.0f))
+            {
+                client->send();
+                last_ext_upd = now;
+            }
         }
 
         if((screen == MenuScreen::AfterGame && prev_screen == screen) || (screen != MenuScreen::InGame && screen != MenuScreen::AfterGame) || st != MineClient::State::Playing || in_esc_menu)
@@ -643,15 +833,47 @@ static void do_graphical()
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
 
-        if(client && st == MineClient::State::Playing)
-        {
-            client->send();
-        }
-
         glfwSwapBuffers(window);
     }
 
     if(server_thread.joinable()) server_thread.join();
+
+    if(modified_config)
+    {
+        if(FILE* fh = fopen(filepath.c_str(), "w"); fh != nullptr)
+        {
+            std::string to_write = CONFIG_VERSION;
+            to_write += ';';
+
+            #define ADD(constant, in) { \
+                to_write += constant; \
+                to_write += ':'; \
+                to_write += in; \
+                to_write += ';'; \
+            }
+            #define MAP_TO(constant, in) ADD(constant, std::to_string(in))
+
+            ADD('n', username)
+            MAP_TO('r', crosshair_color[0])
+            MAP_TO('g', crosshair_color[1])
+            MAP_TO('b', crosshair_color[2])
+            MAP_TO('a', crosshair_color[3])
+            MAP_TO('S', mouse_sensitivity)
+            MAP_TO('d', crosshair_distance)
+            MAP_TO('w', crosshair_width)
+            MAP_TO('l', crosshair_length)
+            MAP_TO('W', overlay_w)
+            MAP_TO('H', overlay_h)
+            MAP_TO('Z', minimap_scale)
+            MAP_TO('F', fov)
+
+            #undef MAP_TO
+            #undef ADD
+
+            fwrite(to_write.c_str(), 1, to_write.size(), fh);
+            fclose(fh);
+        }
+    }
     }
 
     // Cleanup
@@ -660,6 +882,7 @@ static void do_graphical()
     ImGui::DestroyContext();
 }
 
+#ifndef __SWITCH__
 static void do_server_alone(char** args)
 {
     const char* width_a = args[0];
@@ -682,28 +905,30 @@ static void do_server_alone(char** args)
     server_thread_func(std::make_unique<MineServer>(width, height, bombs, players));
     printf("Server stopped.\n");
 }
+#endif
 
 int main(int argc, char** argv)
 {
-    srand(time(NULL));
-
     if(enet_initialize () != 0)
     {
         fprintf(stderr, "An error occurred while initializing ENet.\n");
         return 1;
     }
 
+    #ifndef __SWITCH__
     if(argc == 6)
     {
         const char* server_indicator = argv[1];
         if(strcmp(server_indicator, "srv") == 0) do_server_alone(argv + 2);
     }
     else
+    #endif
     {
         glfwSetErrorCallback(glfw_error_callback);
         if(glfwInit())
         {
-            do_graphical();
+            std::string confpath = argv[0];
+            do_graphical(confpath + ".cfg");
             glfwTerminate();
         }
     }

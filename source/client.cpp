@@ -4,9 +4,12 @@
 
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
+
 namespace {
+    constexpr float min_pitch_to_look = -30.0f;
     constexpr float Overlay_TL_x = -1.0f;
     constexpr float Overlay_TL_y = 1.0f;
     constexpr float MyEpsilon = 0.00006103515625f;
@@ -21,6 +24,23 @@ namespace {
     inline const glm::vec4 solidWhite{1.0f, 1.0f, 1.0f, 1.0f};
     inline const glm::vec4 solidBlack{0.0f, 0.0f, 0.0f, 1.0f};
     inline const glm::vec4 slightlyBlack{0.0f, 0.0f, 0.0f, 0.75f};
+    inline std::string typed_str;
+    inline constexpr size_t MAX_CHAT_LINES = 8;
+
+    void character_callback(GLFWwindow* window, unsigned int codepoint)
+    {
+        bool lc = (codepoint >= 'a' && codepoint <= 'z');
+        bool uc = (codepoint >= 'A' && codepoint <= 'Z');
+        bool di = (codepoint >= '0' && codepoint <= '9');
+        bool sp = codepoint == ' ';
+        if(lc || uc || di || sp)
+        {
+            if(typed_str.size() < MAX_CHAT_LINE_LEN_TXT)
+            {
+                typed_str += char(codepoint);
+            }
+        }
+    }
 
     template<size_t N>
     constexpr std::array<UVArr, N> generate_char_uvs(const std::array<std::pair<int, int>, N>& coords)
@@ -29,7 +49,6 @@ namespace {
 
         constexpr float delta_u = 0.0625f;
         constexpr float delta_v = 0.125f;
-        constexpr float delta_y = 0.125f;
         constexpr float extra_u = 8.0f / 1024.0f;
         constexpr float extra_v = 8.0f / 512.0f;
 
@@ -103,8 +122,23 @@ namespace {
         Fillers::fill_quad_generic(verts, 0,
             PDD3{
                 {0.0f, 0.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 128.0f/384.0f, 0.0f}
+            },
+            PDD2{
+                {0.0f, 1.0f},
+                {1.0f, 0.0f},
+                {0.0f, 1.0f},
+            },
+        solidWhite);
+    }
+    void fill_chat_visible(VertexPtr verts)
+    {
+        Fillers::fill_quad_generic(verts, 0,
+            PDD3{
+                {0.0f, 0.0f, 0.0f},
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
                 {0.0f, 1.0f},
@@ -134,8 +168,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {0.0f, 0.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
                 {0.0f, 0.75f},
@@ -150,7 +184,7 @@ namespace {
         Fillers::fill_quad_generic(verts, 0,
             PDD3{
                 {0.0f, -1.0f + MyEpsilon * 2.0f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f},
             },
             PDD2{
@@ -166,8 +200,8 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {-0.5f, 0.5f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             plain_color_uv,
             solidWhite
@@ -201,8 +235,8 @@ namespace {
 
                 Fillers::fill_quad_generic(verts, idx,
                     PDD3{
-                        {x, -1.0f + wall_height, z},
-                        {1.0f, 0.0f, 0.0f},
+                        {x + ((1 - d) * 1) , -1.0f + wall_height, z},
+                        {1.0f * ((d * 2) - 1), 0.0f, 0.0f},
                         {0.0f, wall_height, 0.0f},
                     },
                     wall_uvs,
@@ -219,8 +253,8 @@ namespace {
 
                 Fillers::fill_quad_generic(verts, idx,
                     PDD3{
-                        {x, -1.0f + wall_height, z},
-                        {0.0f, 0.0f, 1.0f},
+                        {x, -1.0f + wall_height, z + (d * -1) + (d * 2) },
+                        {0.0f, 0.0f, -1.0f * ((d * 2) - 1)},
                         {0.0f, wall_height, 0.0f},
                     },
                     wall_uvs,
@@ -231,12 +265,12 @@ namespace {
         }
     }
 
-    void fill_player(VertexPtr verts)
+    void fill_cube(VertexPtr verts)
     {
         Fillers::fill_quad_generic(verts, 0, // +Z
             PDD3{
-                {-0.5f, +0.5f, +0.5f},
-                {+1.0f, 0.0f, 0.0f},
+                {+0.5f, +0.5f, +0.5f},
+                {-1, 0, 0},
                 {0.0f, +1.0f, 0.0f}
             },
         plain_color_uv, solidWhite);
@@ -250,22 +284,22 @@ namespace {
         Fillers::fill_quad_generic(verts, 2, // +Y
             PDD3{
                 {-0.5f, +0.5f, +0.5f},
-                {+1.0f, 0.0f, 0.0f},
+                {+1, 0, 0},
                 {0.0f, 0.0f, +1.0f}
             },
         plain_color_uv, solidWhite);
 
         Fillers::fill_quad_generic(verts, 3, // -Z
             PDD3{
-                {+0.5f, -0.5f, -0.5f},
+                {-0.5f,-0.5f, -0.5f},
                 {0.0f,+1.0f,0.0f},
-                {+1.0f,0.0f,0.0f}
+                {-1.0f,0.0f,0.0f}
             },
         plain_color_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 4, // +X
             PDD3{
-                {+0.5f, -0.5f, -0.5f},
-                {0.0f,0.0f,+1.0f},
+                {+0.5f, -0.5f, +0.5f},
+                {0.0f,0.0f,-1.0f},
                 {0.0f,-1.0f,0.0f}
             },
         plain_color_uv, solidWhite);
@@ -276,20 +310,24 @@ namespace {
                 {+1.0f,0.0f,0.0f}
             },
         plain_color_uv, solidWhite);
+    }
 
+    void fill_player_face(VertexPtr verts)
+    {
         const PDD2 eye_uv{
-            {0.125f, 1.0f},
-            {0.125f, 0.0f},
-            {0.0f, 0.25f}
+            {0.125f + 0.125f, 1.0f},
+            {0.0f, -0.25f},
+            {0.125f, 0.0f}
         };
-        Fillers::fill_quad_generic(verts, 6,  // -Z
+        Fillers::fill_quad_generic(verts, 0,
             PDD3{
-                {+0.5f, -0.5f, -0.5f - MyEpsilon},
-                {0.0f,+1.0f,0.0f},
-                {+1.0f,0.0f,0.0f}
+                {+0.5f,+0.5f, -0.5f - MyEpsilon},
+                {0.0f,-1.0f,0.0f},
+                {+1.0f,0.0f,0.0f},
             },
         eye_uv, solidBlack);
     }
+
     void fill_name(VertexPtr verts, std::string_view name)
     {
         constexpr float start_y = 1.25f - 0.0625f;
@@ -300,8 +338,8 @@ namespace {
 
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
-                {start_x, start_y, 0.0f},
-                {-width, 0.0f, 0.0f},
+                {start_x - width, start_y, 0.0f},
+                {width, 0.0f, 0.0f},
                 {0.0f, height, 0.0f}
             },
             plain_color_uv, slightlyBlack);
@@ -351,7 +389,7 @@ namespace {
             idx += 1;
         }
     }
-    void fill_counters(VertexPtr verts, const SCPacketData& info, const int bombs, const bool first_time)
+    void fill_counters(VertexPtr verts, const ServerWorldPacket& info, const int bombs, const bool first_time)
     {
         constexpr float timer_y = 128.0f / 384.0f;
         constexpr float delta_y = 50.0f / 384.0f;
@@ -421,16 +459,184 @@ namespace {
         Fillers::fill_quad_generic(verts, 0, 
             PDD3{
                 {-0.5f, 0.5f, 0.0f},
-                {1.0f, 0.0f, 0.0f},
-                {0.0f, 1.0f, 0.0f}
+                {1, 0, 0},
+                {0, 1, 0}
             },
             PDD2{
-                {0.0625f + MyEpsilon, 1.0f - MyEpsilon},
-                {0.0625f - (MyEpsilon*2.0f), 0.0f},
-                {0.0f, 0.125f - (MyEpsilon*2.0f)}
+                {0.0625f + (MyEpsilon*2.0f), 1.0f - 0.125f - (MyEpsilon*2.0f)},
+                {0.0625f - (MyEpsilon*4.0f), 0.0f},
+                {0.0f, 0.125f - (MyEpsilon*4.0f)}
             },
             solidWhite
         );
+    }
+    
+    void fill_chat(VertexPtr verts, const std::vector<std::unique_ptr<char[]>>& lines, const std::vector<PlayerData>& players)
+    {
+        constexpr float start_y = 1.0f;
+        constexpr float height = 2.0f/(MAX_CHAT_LINES + 2);
+        const float delta_x = 2.0f/MAX_CHAT_LINE_LEN;
+        const float start_x = -1.0f;
+
+        size_t idx = MAX_CHAT_LINE_LEN;
+        float x = start_x;
+        float y = start_y;
+
+        auto write_char = [&](const int c, const auto& arr, const auto& col) {
+            const auto [l_u, t_v, del_u, del_v] = arr[c];
+            Fillers::fill_quad_generic(verts, idx, 
+                PDD3{
+                    {x, y, -MyEpsilon},
+                    {delta_x, 0.0f, 0.0f},
+                    {0.0f, height, 0.0f}
+                },
+                PDD2{
+                    {l_u, t_v},
+                    {del_u, 0.0f},
+                    {0.0f, del_v}
+                },
+            col);
+        };
+
+        for(size_t i = MAX_CHAT_LINE_LEN, j = 0; i < verts.count / 6; ++i)
+        {
+            write_char(0, transparent_uvs_arr, solidWhite);
+            idx += 1;
+
+            j++;
+            if(j == MAX_CHAT_LINE_LEN)
+            {
+                x = start_x;
+                y -= height;
+                j = 0;
+            }
+            else
+            {
+                x += delta_x;
+            }
+        }
+        
+        x = start_x;
+        y = start_y;
+        idx = MAX_CHAT_LINE_LEN;
+        for(auto& ln : lines)
+        {
+            const char usernum = ln[0];
+            const auto col = players[usernum].color;
+            for(size_t i = 0; i < MAX_NAME_LEN; ++i)
+            {
+                const auto c = players[usernum].username[i];
+                if(c == '_')
+                {
+                    write_char(0, underscore_uvs_arr, col);
+                }
+                else if(c == ' ')
+                {
+                    write_char(0, transparent_uvs_arr, col);
+                }
+                else if(c >= '0' && c <= '9')
+                {
+                    write_char(c - '0', number_uvs_arr, col);
+                }
+                else if(c >= 'a' && c <= 'z')
+                {
+                    write_char(c - 'a', lowerc_uvs_arr, col);
+                }
+                else if(c >= 'A' && c <= 'Z')
+                {
+                    write_char(c - 'A', upperc_uvs_arr, col);
+                }
+                x += delta_x;
+                idx += 1;
+            }
+            
+            x = start_x;
+            y -= height;
+            for(size_t i = 1; i <= MAX_CHAT_LINE_LEN_TXT; ++i)
+            {
+                const auto c = ln[i];
+                if(c == ' ')
+                {
+                    write_char(0, transparent_uvs_arr, solidWhite);
+                }
+                else if(c >= '0' && c <= '9')
+                {
+                    write_char(c - '0', number_uvs_arr, solidWhite);
+                }
+                else if(c >= 'a' && c <= 'z')
+                {
+                    write_char(c - 'a', lowerc_uvs_arr, solidWhite);
+                }
+                else if(c >= 'A' && c <= 'Z')
+                {
+                    write_char(c - 'A', upperc_uvs_arr, solidWhite);
+                }
+                x += delta_x;
+                idx += 1;
+            }
+
+            x = start_x;
+            y -= height;
+        }
+
+    }
+
+    void fill_typed(VertexPtr verts)
+    {
+        constexpr float height = 2.0f/(MAX_CHAT_LINES + 2);
+        const float delta_x = 2.0f/MAX_CHAT_LINE_LEN;
+        const float start_x = -1.0f;
+
+        size_t idx = 0;
+        float x = start_x;
+        const float y = -1.0f + height * 2.0f;
+
+        auto write_char = [&](const int c, const auto& arr, const auto& col) {
+            const auto [l_u, t_v, del_u, del_v] = arr[c];
+            Fillers::fill_quad_generic(verts, idx, 
+                PDD3{
+                    {x, y, -MyEpsilon},
+                    {delta_x, 0.0f, 0.0f},
+                    {0.0f, height, 0.0f}
+                },
+                PDD2{
+                    {l_u, t_v},
+                    {del_u, 0.0f},
+                    {0.0f, del_v}
+                },
+            col);
+        };
+
+        for(size_t i = 0; i < MAX_CHAT_LINE_LEN; ++i)
+        {
+            write_char(0, transparent_uvs_arr, solidWhite);
+            x += delta_x;
+            idx += 1;
+        }
+
+        idx = 0;
+        x = start_x;
+        for(const auto c : typed_str)
+        {
+            if(c == ' ')
+            {
+                write_char(0, transparent_uvs_arr, solidWhite);
+            }
+            else if(c >= '0' && c <= '9')
+            {
+                write_char(c - '0', number_uvs_arr, solidWhite);
+            }
+            else if(c >= 'a' && c <= 'z')
+            {
+                write_char(c - 'a', lowerc_uvs_arr, solidWhite);
+            }
+            else if(c >= 'A' && c <= 'Z')
+            {
+                write_char(c - 'A', upperc_uvs_arr, solidWhite);
+            }
+            x += delta_x;
+            idx += 1;
+        }
     }
 }
 
@@ -438,16 +644,23 @@ MineClient::MineClient(const char * server_addr, const std::array<float, 4>& c_c
 :
 host(enet_host_create(nullptr, 1, 2, 0, 0)),
 minimap_frame(256, 256),
+chat_frame(MAX_CHAT_LINE_LEN * 32, (MAX_CHAT_LINES + 1) * 32),
 minimap_behind_buf(Buffer::Quads(1)),
 indicator_buf(Buffer::Quads(1)),
+chat_buf(Buffer::Quads((MAX_CHAT_LINE_LEN * MAX_CHAT_LINES) + MAX_CHAT_LINE_LEN)),
+chat_visible_buf(Buffer::Quads(1)),
 minimap_buf(Buffer::Quads(1)),
 overlay_buf(Buffer::Quads(1)),
 crosshair_buf(Buffer::Quads(1)),
 counters_buf(Buffer::Quads(5 + 4 + 4)),
 cursor_buf(Buffer::Quads(1)),
-player_buf(Buffer::Quads(7)),
+cube_buf(Buffer::Quads(6)),
+player_face_buf(Buffer::Quads(1)),
 current_state(MineClient::State::NotConnected),
+pressed_m1(false),
+pressed_m2(false),
 first_mouse(true),
+send_str(false),
 my_crosshair_color(c_c),
 username(un)
 {
@@ -457,7 +670,10 @@ username(un)
     fill_minimap(minimap_buf.getAllVerts());
     fill_minimap_behind(minimap_behind_buf.getAllVerts());
     fill_overlay(overlay_buf.getAllVerts());
-    fill_player(player_buf.getAllVerts());
+    fill_cube(cube_buf.getAllVerts());
+    fill_player_face(player_face_buf.getAllVerts());
+    fill_chat_visible(chat_visible_buf.getAllVerts());
+    fill_typed(chat_buf.getAllVerts());
 
     if(server_addr[0] == '\0')
     {
@@ -470,16 +686,14 @@ username(un)
     address.port = COMMS_PORT;
     peer = enet_host_connect(host.get(), &address, 2, 0);
 
-    cs_packet.going_towards = 5;
     cs_packet.action = 0;
 }
 
-void MineClient::receive_packet(unsigned char* data, size_t length)
+void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<std::unique_ptr<char[]>>& out_chat)
 {
     if(current_state == MineClient::State::NotConnected)
     {
-        // length == sizeof(SCPacketDataInit)
-        SCPacketDataInit in;
+        ServerWorldPacketInit in;
         memcpy(&in, data, sizeof(in));
 
         players.resize(in.players);
@@ -489,15 +703,15 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         height = in.height;
         total_bombs = ENET_NET_TO_HOST_16(in.bombs);
 
-        PacketDataPlayerInit out;
+        PlayerMetaPacket out;
         out.cross_r = 255 * my_crosshair_color[0];
         out.cross_g = 255 * my_crosshair_color[1];
         out.cross_b = 255 * my_crosshair_color[2];
         out.cross_a = 255 * my_crosshair_color[3];
         memcpy(out.username, username, sizeof(out.username));
 
-        auto packet = enet_packet_create(&out, sizeof(out), ENET_PACKET_FLAG_RELIABLE);
-        enet_peer_send(peer, 0, packet);
+        auto send_packet(enet_packet_create(&out, sizeof(out), ENET_PACKET_FLAG_RELIABLE));
+        enet_peer_send(peer, 0, send_packet);
         enet_host_flush(host.get());
 
         current_state = MineClient::State::Waiting;
@@ -505,7 +719,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
     else if(current_state == MineClient::State::Waiting)
     {
         size_t offset = 0;
-        LaunchData in;
+        StartDataPacket in;
         for(auto& player : players)
         {
             memcpy(&in, data + offset, sizeof(in));
@@ -525,10 +739,9 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         lower_world_buf = std::make_unique<Buffer>(Buffer::Quads(width * height));
         upper_world_buf = std::make_unique<Buffer>(Buffer::Quads(width * height));
         render_world();
-        fill_counters(counters_buf.getAllVerts(), SCPacketData{0,0,0,0}, total_bombs, true);
+        fill_counters(counters_buf.getAllVerts(), ServerWorldPacket{0,0,0,0}, total_bombs, true);
 
         current_state = MineClient::State::Playing;
-        last_int_upd = std::chrono::steady_clock::now();
     }
     else if(current_state == MineClient::State::Playing)
     {
@@ -547,17 +760,37 @@ void MineClient::receive_packet(unsigned char* data, size_t length)
         }
 
         size_t offset = sizeof(sc_packet);
-        SCPacketDataPlayer in;
+        ServerPlayerPacket in;
         unsigned char idx = 0;
         for(auto& player : players)
         {
             memcpy(&in, data + offset, sizeof(in));
-            player.fill(in, idx == my_player_id);
+            if(idx != my_player_id)
+            {
+                player.fill(in);
+            }
             offset += sizeof(in);
             idx += 1;
         }
 
         memcpy(world.data(), data + offset, world.size());
+        offset += world.size();
+        if(offset < length)
+        {
+            if(out_chat.size() == (MAX_CHAT_LINES / 2))
+            {
+                std::rotate(out_chat.begin(), out_chat.begin() + 1, out_chat.end());
+            }
+            else
+            {
+                out_chat.push_back(std::make_unique<char[]>(MAX_CHAT_LINE_LEN + 2));
+            }
+            char* write_to = out_chat.back().get();
+            memset(write_to, 0, MAX_CHAT_LINE_LEN + 2);
+            memcpy(write_to, data + offset, length - offset);
+            fill_chat(chat_buf.getAllVerts(), out_chat, players);
+        }
+
         render_world();
         fill_counters(counters_buf.getAllVerts(), sc_packet, 0, false);
     }
@@ -619,20 +852,115 @@ void MineClient::cancel()
     current_state = MineClient::State::Cancelled;
 }
 
-void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu)
+void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int display_w, int display_h, bool& in_esc_menu, bool& released_esc, bool& is_typing, const float deltaTime)
 {
+    {
+    size_t idx = 0;
+    for(auto& p : players)
+    {
+        auto i = idx++;
+        if(i == my_player_id) continue;
+
+        if((roundf(p.movedDistance * 100.0f) / 100.0f) == 0.0f)
+        {
+            fprintf(stderr, "Player %zd is not moving, swinging back\n", i);
+            if(std::fabs(p.movementSwing) > ((SwingSpeed * 0.25f) * deltaTime))
+            {
+                p.currentSwingDirection = std::copysign(SwingSpeed, p.movementSwing);
+                p.movementSwing -= p.currentSwingDirection * deltaTime;
+            }
+            if(std::fabs(p.movementSwing) <= ((SwingSpeed * 0.25f) * deltaTime))
+            {
+                p.currentSwingDirection = SwingSpeed;
+                p.movementSwing = 0.0f;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "Player %zd is moving!! SWANGIN\n", i);
+            p.movementSwing += p.currentSwingDirection * deltaTime;
+            if(std::fabs(p.movementSwing) >= MaxSwingAmplitude)
+            {
+                p.currentSwingDirection = -p.currentSwingDirection;
+                p.movementSwing = std::copysign(MaxSwingAmplitude, p.movementSwing);
+            }
+        }
+    }
+    }
+
     if(!Focus::is_focused) return;
 
-    const auto now = std::chrono::steady_clock::now();
-    const float deltatime = std::chrono::duration<float>{now - last_int_upd}.count();
-    last_int_upd = now;
-    const float velocity = MovementSpeed * deltatime;
+    const float velocity = MovementSpeed * deltaTime;
 
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     {
-        in_esc_menu = true;
-        first_mouse = true;
-        return;
+        if(released_esc)
+        {
+            if(is_typing)
+            {
+            
+                glfwSetCharCallback(window, nullptr);
+                is_typing = false;
+            }
+            else
+            {
+                in_esc_menu = true;
+                first_mouse = true;
+            }
+            return;
+        }
+    }
+    else
+    {
+        released_esc = true;
+    }
+
+    static bool released_enter = true;
+    if(glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        if(released_enter)
+        {
+            released_enter = false;
+            if(is_typing)
+            {
+                glfwSetCharCallback(window, nullptr);
+                is_typing = false;
+                send_str = !typed_str.empty();
+            }
+            else
+            {
+                is_typing = true;
+                glfwSetCharCallback(window, character_callback);
+            }
+        }
+    }
+    else
+    {
+        released_enter = true;
+    }
+    
+    static bool released_bp = true;
+    if(glfwGetKey(window, GLFW_KEY_BACKSPACE) == GLFW_PRESS)
+    {
+        if(released_bp)
+        {
+            released_bp = false;
+            if(typed_str.size())
+            {
+                typed_str.pop_back();
+            }
+        }
+    }
+    else
+    {
+        released_bp = true;
+    }
+
+    static size_t prev_typed_size = 0;
+    if(typed_str.size() != prev_typed_size)
+    {
+        prev_typed_size = typed_str.size();
+        fill_typed(chat_buf.getAllVerts());
     }
 
     double xpos, ypos;
@@ -645,7 +973,6 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         prevy = ypos;
     }
 
-    cs_packet.action = 0;
     if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         if(!pressed_m1)
@@ -678,6 +1005,43 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     prevx = xpos;
     prevy = ypos;
 
+    float going_towards = 0;
+    unsigned char going_mag = 0;
+
+#if GLFW_VERSION_MAJOR >= 2 && GLFW_VERSION_MINOR >= 3
+    if(GLFWgamepadstate state; glfwGetGamepadState(GLFW_JOYSTICK_1, &state) == GLFW_TRUE)
+    {
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_START])
+        {
+            in_esc_menu = true;
+            first_mouse = true;
+            return;
+        }
+
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER])
+        {
+            cs_packet.action = 1;
+        }
+        if(state.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER])
+        {
+            cs_packet.action = 2;
+        }
+
+        #define DEADZONE(ax) ((state.axes[ax] <= 0.0625f/2.0f) ? 0 : state.axes[ax])
+
+        float x_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_X);
+        float y_move = DEADZONE(GLFW_GAMEPAD_AXIS_LEFT_Y);
+
+        going_towards = atan2f(-y_move, x_move);
+        going_mag = sqrtf((x_move * x_move) + (y_move * y_move)) * 255;
+
+        xoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_X) * (display_w/2.0f);
+        yoffset = DEADZONE(GLFW_GAMEPAD_AXIS_RIGHT_Y) * (display_h/2.0f);
+
+        #undef DEADZONE
+    }
+#endif
+
     auto& playa = players[my_player_id];
     playa.yaw += xoffset * mouse_sensitivity;
     playa.yaw %= 360;
@@ -692,33 +1056,43 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     int16_t pitch = playa.pitch;
     memcpy(&cs_packet.pitch, &pitch, sizeof(int16_t));
 
-    cs_packet.going_towards = 5;
-
-    if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cs_packet.going_towards ^= 1;
-    else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cs_packet.going_towards ^= (2 | 1);
-
-    if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cs_packet.going_towards ^= 4;
-    else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cs_packet.going_towards ^= (8 | 4);
-
-    if(unsigned char going_towards = cs_packet.going_towards; going_towards != 5)
+    if(going_mag == 0 && !is_typing)
     {
-        const auto yaw_rads = glm::radians(float(yaw));
+        going_mag = 4 | 1;
+        if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            going_mag ^= 1;
+        else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            going_mag ^= (2 | 1);
+
+        if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            going_mag ^= 4;
+        else if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            going_mag ^= (8 | 4);
+        
+        if(going_mag != (4 | 1))
+        {
+            const int forward_movement = -(int(going_mag & 3) - 1);
+            const int side_movement = int((going_mag >> 2) & 3) - 1;
+            going_towards = atan2f(forward_movement, side_movement);
+            going_mag = 255;
+        }
+        else
+        {
+            going_mag = 0;
+        }
+    }
+
+    const auto yaw_rads = glm::radians(float(yaw));
+    if(going_mag != 0)
+    {
         glm::vec3 Forward{
             cos(yaw_rads),
             0.0f,
             sin(yaw_rads)
         };
-        glm::vec3 Right = glm::normalize(glm::cross(Forward, {0.0f, 1.0f, 0.0f}));
+        glm::vec3 Right = glm::normalize(glm::cross(Forward, {0, 1, 0}));
 
-        const int forward_movement = -(int(going_towards & 3) - 1);
-        const int side_movement = int((going_towards >> 2) & 3) - 1;
-
-        const float ang = atan2f(side_movement, forward_movement);
-        playa.position += velocity * ((Forward * cosf(ang)) + Right * sinf(ang));
+        playa.position += velocity * (going_mag / 255.0f) * ((Forward * sinf(going_towards)) + Right * cosf(going_towards));
 
         if(playa.position[0] < 0.5f)
         {
@@ -738,15 +1112,40 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
             playa.position[2] = height - 0.5f;
         }
     }
+
+    playa.looking_at_x = -1;
+    playa.looking_at_y = -1;
+
+    if(playa.pitch <= min_pitch_to_look)
+    {
+        const auto pitch_rads = glm::radians(float(playa.pitch));
+        const glm::vec3 Front{
+            cosf(yaw_rads) * cosf(pitch_rads),
+            sinf(pitch_rads),
+            sinf(yaw_rads) * cosf(pitch_rads)
+        };
+        const auto floorNormal = glm::vec3(0, 1, 0);
+        const auto floorPos = glm::vec3(0.0f, -1.0f, 0.0f);
+        const float d = glm::dot(floorNormal, Front);
+        if(d != 0.0f)
+        {
+            const float dist = glm::dot(floorNormal, floorPos - playa.position) / d;
+            auto LookingAt = playa.position + (Front * dist);
+            if(!(LookingAt[0] < 0 || LookingAt[0] >= width || LookingAt[2] < 0 || LookingAt[2] >= height))
+            {
+                playa.looking_at_x = LookingAt[0];
+                playa.looking_at_y = LookingAt[2];
+            }
+        }
+    }
 }
 
 void MineClient::render(RenderInfo& info)
 {
     const auto& self = players[my_player_id];
 
+    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
-
-    glActiveTexture(GL_TEXTURE0);
 
     // bind textures on corresponding texture units
     info.spritesheet.bind();
@@ -755,7 +1154,7 @@ void MineClient::render(RenderInfo& info)
     info.worldShader.use();
 
     // pass projection matrix to shader (note that in this case it could change every frame)
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)info.display_w / (float)info.display_h, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(info.fov), (float)info.display_w / (float)info.display_h, 0.1f, 100.0f);
     info.worldShader.setMat4("projection", projection);
 
     // camera/view transformation
@@ -789,23 +1188,79 @@ void MineClient::render(RenderInfo& info)
         }
     }
 
-    player_buf.bind();
     for(unsigned char i = 0; i < players.size(); ++i)
     {
         if(i == my_player_id) continue;
 
         const auto& playa = players[i];
+
         info.worldShader.setVec4("constColor", playa.color);
-        model = glm::translate(glm::mat4(1.0f), playa.position);
-        model = glm::rotate(model, glm::radians(-(float(playa.yaw) + 90.0f)), glm::vec3{0.0f, 1.0f, 0.0f});
-        model = glm::rotate(model, glm::radians(float(playa.pitch)), glm::vec3{1.0f, 0.0f, 0.0f});
+
+        const auto playerSpinMat = glm::rotate(glm::translate(glm::mat4(1.0f), playa.position), glm::radians(-(float(playa.yaw) + 90.0f)), glm::vec3{0, 1, 0});
+
+        cube_buf.bind();
+
+        model = glm::translate(playerSpinMat, glm::vec3{0.0f, -0.35f, 0.0f});
+        model = glm::scale(model, glm::vec3{0.25f, 0.45f, 0.125f});
+        
         info.worldShader.setMat4("model", model);
-        player_buf.draw();
+        cube_buf.draw();
+
+        const auto swingRads = glm::radians(playa.movementSwing);
+
+        model = playerSpinMat;
+        auto armMat = model;
+
+        model = armMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + (0.45f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{+(0.125f + 0.0625f), 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), -sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+        
+        model = armMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + (0.45f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{-(0.125f + 0.0625f), 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        model = playerSpinMat;
+        auto legMat = model;
+
+        model = legMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + 0.45f + (0.425f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{+0.0625f, 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+        
+        model = legMat;
+        model = glm::translate(model, glm::vec3{0, -(0.125 + 0.45f + (0.425f / 2.0f)), 0});
+        model = glm::translate(model, glm::vec3{-0.0625f, 0, 0});
+        model = glm::translate(model, glm::vec3{0, sinf(fabs(swingRads)) * (0.0625f * 1.5f), -sinf(swingRads) * 0.25f});
+        model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        model = glm::rotate(playerSpinMat, glm::radians(float(playa.pitch)), glm::vec3{1, 0, 0});
+        model = glm::scale(model, glm::vec3{0.25f, 0.25f, 0.25f});
+        info.worldShader.setMat4("model", model);
+        cube_buf.draw();
+
+        player_face_buf.bind();
+        player_face_buf.draw();
     }
 
     info.worldShader.setVec4("constColor", solidWhite);
 
-    const float my_player_inv_yaw_rads = glm::radians(-(float(self.yaw) + 45.0f));
     for(unsigned char i = 0; i < players.size(); ++i)
     {
         if(i == my_player_id) continue;
@@ -818,13 +1273,21 @@ void MineClient::render(RenderInfo& info)
         buf.draw();
     }
 
+    glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     info.flatShader.use();
     info.flatShader.setMat4("model", glm::mat4(1.0f));
     info.flatShader.setVec4("constColor", solidWhite);
 
+    chat_frame.bind();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    chat_buf.bind();
+    chat_buf.draw();
+
     minimap_frame.bind();
-    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClearColor(0, 1, 0, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     minimap_behind_buf.bind();
@@ -869,6 +1332,16 @@ void MineClient::render(RenderInfo& info)
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, info.display_w, info.display_h);
+
+    chat_frame.bindOutput();
+
+    model = glm::translate(glm::mat4(1.0f), glm::vec3{1.0f - (info.overlay_w / 50.0f), -1.0f + ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 0.0f});
+    model = glm::scale(model, glm::vec3{info.overlay_w / 50.0f, ((info.overlay_h * 50.0f) / (50.0f * 50.0f)), 1.0f});
+    info.flatShader.setMat4("model", model);
+
+    chat_visible_buf.bind();
+    chat_visible_buf.draw();
+
     minimap_frame.bindOutput();
 
     model = glm::translate(glm::mat4(1.0f), glm::vec3{Overlay_TL_x, Overlay_TL_y, 0.0f});
@@ -924,14 +1397,28 @@ void MineClient::send()
 {
     if(host)
     {
+        const size_t s = sizeof(cs_packet) + (send_str ? typed_str.size() : 0);
+        auto buf = std::make_unique<char[]>(s);
+        const auto& playa = players[my_player_id];
+        cs_packet.x = ENET_HOST_TO_NET_32(enet_uint32(playa.position[0] * POS_SCALE));
+        cs_packet.y = ENET_HOST_TO_NET_32(enet_uint32(playa.position[2] * POS_SCALE));
         cs_packet.yaw = ENET_HOST_TO_NET_16(cs_packet.yaw);
         cs_packet.pitch = ENET_HOST_TO_NET_16(cs_packet.pitch);
+        cs_packet.looking_at_x = playa.looking_at_x;
+        cs_packet.looking_at_y = playa.looking_at_y;
 
-        auto packet = enet_packet_create(&cs_packet, sizeof(cs_packet), 0);
-        enet_peer_send(peer, 0, packet);
+        memcpy(buf.get(), &cs_packet, sizeof(cs_packet));
+        if(send_str)
+        {
+            std::copy(typed_str.begin(), typed_str.end(), buf.get() + sizeof(cs_packet));
+            typed_str.clear();
+            send_str = false;
+        }
+
+        auto send_packet(enet_packet_create(buf.get(), s, 0));
+        enet_peer_send(peer, 0, send_packet);
         enet_host_flush(host.get());
 
-        cs_packet.going_towards = 5;
         cs_packet.action = 0;
 
         cs_packet.yaw = ENET_NET_TO_HOST_16(cs_packet.yaw);
@@ -959,12 +1446,11 @@ glm::mat4 MineClient::get_view_matrix()
     const auto Front = glm::normalize(front);
 
     // also re-calculate the Right and Up vector
-    const auto Right = glm::normalize(glm::cross(Front, glm::vec3(0.0f, 1.0f, 0.0f)));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+    const auto Right = glm::normalize(glm::cross(Front, glm::vec3(0, 1, 0)));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
     const auto Up    = glm::normalize(glm::cross(Right, Front));
 
     return glm::lookAt(self.position, self.position + Front, Up);
 }
-
 
 glm::mat4 MineClient::get_top_view_matrix()
 {
@@ -1018,12 +1504,12 @@ void MineClient::render_world()
 
             const PDD3 pos_upper{
                 {x_l, -1.0f + MyEpsilon, t_y},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f}
             };
             const PDD3 pos_lower{
                 {x_l, -1.0f, t_y},
-                {1.0f, 0.0f, 0.0f},
+                {1, 0, 0},
                 {0.0f, 0.0f, 1.0f}
             };
             const PDD2 upper_uv{

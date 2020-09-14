@@ -1,24 +1,24 @@
-SOURCES		:=	source glad/src imgui
-INCLUDES	:=	source glad/include imgui
-DATA		:=	data
-BUILD		:=	build-nix
-TARGET		:=	$(notdir $(CURDIR))
+SOURCES     :=	source glad/src imgui
+INCLUDES    :=	source glad/include imgui
+DATA        :=	data
+BUILD       :=	build-nix
+TARGET      :=	$(notdir $(CURDIR))
 
-LIBS		:=	glfw enet dl pthread m
+WANTLIBS    :=	glfw enet dl  m
 
-CFLAGS		:=	-O2 -Wall -Wextra -ffunction-sections -Wno-unused-parameter -Wno-unused-variable
-CXXFLAGS	:=	$(CFLAGS) -std=c++17 -fno-rtti
+CFLAGS      :=	-O2 -Wall -Wextra -ffunction-sections -Wno-unused-parameter -Wno-unused-variable -pthread
+CXXFLAGS    :=	$(CFLAGS) -std=c++17 -fno-rtti
 
 # https://spin.atomicobject.com/2016/08/26/makefile-c-projects/
-SRCS	:=	$(shell find $(SOURCES) -name *.cpp -or -name *.c)
-DATAS	:=	$(shell find $(DATA) -name *.png -or -name *.glsl)
-OBJS	:=	$(SRCS:%=$(BUILD)/%.o)
-DATAS_H	:=	$(DATAS:%=$(BUILD)/%.h)
-DEPS	:=	$(OBJS:.o=.d) $(DATAS_H:.h=.d)
-INC_DIRS	:=	$(shell find $(INCLUDES) -type d) $(addprefix $(BUILD)/,$(DATA))
-INC_FLAGS	:=	$(addprefix -I,$(INC_DIRS))
-CPPFLAGS	:=	$(INC_FLAGS) $(LIB_DIRS_F) -MMD -MP
-LDFLAGS		:=	-Wl,--gc-sections $(addprefix -l,$(LIBS))
+SRCS    :=	$(shell find $(SOURCES) -name *.cpp -or -name *.c)
+DATAS   :=	$(shell find $(DATA) -name *.png -or -name *.glsl)
+OBJS    :=	$(SRCS:%=$(BUILD)/%.o)
+DATAS_H :=	$(DATAS:%=$(BUILD)/%.h)
+DEPS    :=	$(OBJS:.o=.d) $(DATAS_H:.h=.d)
+INC_DIRS    :=	$(INCLUDES) $(addprefix $(BUILD)/,$(DATA))
+INC_FLAGS   :=	$(addprefix -I,$(INC_DIRS))
+CPPFLAGS    :=	$(INC_FLAGS) -MMD -MP
+LDFLAGS     :=	-Wl,--gc-sections $(addprefix -l,$(WANTLIBS)) -pthread
 
 .PHONY:	all clean
 
@@ -31,7 +31,7 @@ clean:
 	@echo "Done!"
 
 $(TARGET): $(DATAS_H) $(OBJS)
-	$(CXX) $(LDFLAGS) $(OBJS) -o $@ 
+	$(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
 # c source
 $(BUILD)/%.c.o: %.c
