@@ -40,7 +40,7 @@ extern "C" {
 #include "flat_shader_vsh.glsl.h"
 #include "world_shader_vsh.glsl.h"
 
-#define CONFIG_VERSION "v02"
+inline constexpr std::string_view CONFIG_VERSION = "v02";
 
 void glCheckError_(const char *file, int line)
 {
@@ -350,9 +350,9 @@ static void do_graphical(std::string filepath)
             size_t rsize = fread(buf.get(), 1, s.st_size, fh);
             fclose(fh);
             std::string_view sv(buf.get(), rsize);
-            if(sv.substr(0, 2) == CONFIG_VERSION)
+            if(sv.compare(0, CONFIG_VERSION.size(), CONFIG_VERSION) == 0)
             {
-                sv = sv.substr(4); // strlen(CONFIG_VERSION) + 1 for ';'
+                sv = sv.substr(CONFIG_VERSION.size() + 1); // + 1 for ';'
                 while(sv.size() > 0)
                 {
                     const char front = sv.front();
@@ -536,18 +536,15 @@ static void do_graphical(std::string filepath)
                     }
                     if(!in_esc_menu) set_controls_for_game();
                 }
-                else
+
+                if(deltaTime >= 1.0f/60.0f)
                 {
-                    if(deltaTime >= 1.0f/60.0f)
+                    client->handle_events(window, mouse_sensitivity/20.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
+                    if(in_esc_menu)
                     {
-                        client->handle_events(window, mouse_sensitivity/25.0f, display_w, display_h, in_esc_menu, released_esc, is_typing, deltaTime);
-                        if(in_esc_menu)
-                        {
-                            released_esc = false;
-                            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                        }
-                        last_int_upd = now;
+                        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                     }
+                    last_int_upd = now;
                 }
             }
             else
@@ -842,7 +839,7 @@ static void do_graphical(std::string filepath)
     {
         if(FILE* fh = fopen(filepath.c_str(), "w"); fh != nullptr)
         {
-            std::string to_write = CONFIG_VERSION;
+            std::string to_write(CONFIG_VERSION.data(), CONFIG_VERSION.size());
             to_write += ';';
 
             #define ADD(constant, in) { \

@@ -863,7 +863,6 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
 
         if((roundf(p.movedDistance * 100.0f) / 100.0f) == 0.0f)
         {
-            fprintf(stderr, "Player %zd is not moving, swinging back\n", i);
             if(std::fabs(p.movementSwing) > ((SwingSpeed * 0.25f) * deltaTime))
             {
                 p.currentSwingDirection = std::copysign(SwingSpeed, p.movementSwing);
@@ -877,7 +876,6 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
         }
         else
         {
-            fprintf(stderr, "Player %zd is moving!! SWANGIN\n", i);
             p.movementSwing += p.currentSwingDirection * deltaTime;
             if(std::fabs(p.movementSwing) >= MaxSwingAmplitude)
             {
@@ -888,7 +886,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     }
     }
 
-    if(!Focus::is_focused) return;
+    if(in_esc_menu || !Focus::is_focused) return;
 
     const float velocity = MovementSpeed * deltaTime;
 
@@ -896,6 +894,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     {
         if(released_esc)
         {
+            released_esc = false;
             if(is_typing)
             {
             
