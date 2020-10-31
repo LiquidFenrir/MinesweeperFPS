@@ -479,12 +479,20 @@ void MineServer::receive()
                     PlayerMetaPacket in;
                     memcpy(&in, event.packet->data, sizeof(in));
                     c.data.fill(in);
+                    const enet_uint32 skin_size = ENET_NET_TO_HOST_32(in.skinbytes);
+                    if(skin_size != 0)
+                    {
+                        c.skin_start = skins_data.size();
+                        skins_data.insert(skins_data.end(), event.packet->data + sizeof(in), event.packet->data + sizeof(in) + skin_size);
+                        c.skin_end = skins_data.size();
+                    }
                     c.set = true;
                 }
 
                 if((is_all_set = all_set()))
                 {
-                    auto arr = std::make_unique<StartDataPacket[]>(clients.size());
+                    std::vector<unsigned char> to_send((clients.size() * sizeof(StartDataPacket)) + skins_data.size());
+                    // auto arr = std::make_unique<[]>(clients.size());
                     size_t idx = 0;
                     for(auto& cli : clients)
                     {
@@ -497,12 +505,18 @@ void MineServer::receive()
                         cli.doing.y = ENET_HOST_TO_NET_32(enet_uint32(cli.data.position[2] * POS_SCALE));
                         cli.doing.action = 0;
 
-                        arr[idx].info = cli.data.fill_info();
-                        arr[idx].meta = cli.data.fill_meta();
-                        idx += 1;
+                        StartDataPacket pck;
+                        pck.info = cli.data.fill_info();
+                        pck.meta = cli.data.fill_meta();
+                        size_t skin_size = cli.skin_end - cli.skin_start;
+                        pck.meta.skinbytes = ENET_HOST_TO_NET_32(skin_size);
+                        memcpy(to_send.data() + idx, &pck, sizeof(pck));
+                        idx += sizeof(pck);
+                        memcpy(to_send.data() + idx, skins_data.data() + cli.skin_start, skin_size);
+                        idx += skin_size;
                     }
 
-                    auto first_packet = enet_packet_create(arr.get(), sizeof(StartDataPacket) * clients.size(), ENET_PACKET_FLAG_RELIABLE);
+                    auto first_packet = enet_packet_create(to_send.data(), to_send.size(), ENET_PACKET_FLAG_RELIABLE);
                     enet_host_broadcast(host.get(), 0, first_packet);
                 }
 

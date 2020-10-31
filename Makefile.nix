@@ -1,5 +1,5 @@
-SOURCES     :=	source glad/src imgui
-INCLUDES    :=	source glad/include imgui
+SOURCES     :=	source glad/src imgui lodepng
+INCLUDES    :=	source glad/include imgui lodepng
 DATA        :=	data
 BUILD       :=	build-nix
 TARGET      :=	$(notdir $(CURDIR))

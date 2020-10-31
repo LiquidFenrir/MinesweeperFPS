@@ -11,6 +11,7 @@ struct ServClient {
     bool connected = false;
     PlayerData data;
     ClientPlayerPacket doing;
+    size_t skin_start = 0, skin_end = 0;
 };
 
 struct WorldTile {
@@ -59,6 +60,7 @@ private:
     std::vector<WorldTile> world;
     std::vector<ServClient> clients;
     std::vector<unsigned char> data_to_send;
+    std::vector<unsigned char> skins_data;
     ENetHostPtr host;
     ENetAddress address;
 

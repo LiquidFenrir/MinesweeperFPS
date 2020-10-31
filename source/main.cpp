@@ -34,6 +34,7 @@ extern "C" {
 
 #include "globjects.h"
 #include "icon.png.h"
+#include "base_skin.png.h"
 #include "spritesheet.png.h"
 #include "shader.h"
 #include "shader_fsh.glsl.h"
@@ -115,7 +116,7 @@ struct WindowDeleter {
 };
 using WindowPtr = std::unique_ptr<GLFWwindow, WindowDeleter>;
 
-static void do_graphical(std::string filepath)
+static void do_graphical(std::string filepath, const char* skinpath)
 {
     GLFWmonitor* primary = glfwGetPrimaryMonitor();
     int total_resolutions;
@@ -168,7 +169,7 @@ static void do_graphical(std::string filepath)
 
     const auto [initial_w, initial_h] = resolution_results[current_resolution];
     // Create window with graphics context
-    WindowPtr window_holder(glfwCreateWindow(initial_w, initial_h, "MinesweeperFPS v1.1", nullptr, nullptr));
+    WindowPtr window_holder(glfwCreateWindow(initial_w, initial_h, "MinesweeperFPS v1.2", nullptr, nullptr));
     if(!window_holder)
         return;
 
@@ -225,6 +226,8 @@ static void do_graphical(std::string filepath)
     const auto& [tex_width, tex_height, tex_data] = Images::spritesheet;
     glActiveTexture(GL_TEXTURE0);
     Texture spritesheet(tex_width, tex_height, tex_data.data());
+    const auto& [skin_width, skin_height, skin_data] = Images::base_skin;
+    Texture default_skin(skin_width, skin_height, skin_data.data());
 
     flatShader.use();
     flatShader.setInt("texture1", 0);
@@ -633,7 +636,7 @@ static void do_graphical(std::string filepath)
             {
                 size_t l = strnlen(username, MAX_NAME_LEN);
                 if(l < MAX_NAME_LEN) memset(username + l, 0, MAX_NAME_LEN - l);
-                client = std::make_unique<MineClient>(server_address, crosshair_color, username);
+                client = std::make_unique<MineClient>(server_address, skinpath, default_skin, crosshair_color, username);
                 client_start_time = glfwGetTime();
                 start_client = false;
                 in_esc_menu = false;
@@ -918,14 +921,14 @@ int main(int argc, char** argv)
         const char* server_indicator = argv[1];
         if(strcmp(server_indicator, "srv") == 0) do_server_alone(argv + 2);
     }
-    else
+    else if(argc <= 2)
     #endif
     {
         glfwSetErrorCallback(glfw_error_callback);
         if(glfwInit())
         {
             std::string confpath = argv[0];
-            do_graphical(confpath + ".cfg");
+            do_graphical(confpath + ".cfg", argv[1]);
             glfwTerminate();
         }
     }

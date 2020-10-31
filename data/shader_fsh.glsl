@@ -10,5 +10,8 @@ uniform vec4 constColor;
 
 void main()
 {
-	FragColor = constColor * (texture(texture1, TexCoord) * VtxColor);
+	vec4 texel = constColor * (texture(texture1, TexCoord) * VtxColor);
+	if(texel.a < 0.5)
+		discard;
+	FragColor = texel;
 }

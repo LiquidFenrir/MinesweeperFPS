@@ -34,7 +34,7 @@ struct MineClient {
         Disconnected,
     };
 
-    MineClient(const char * server_addr, const std::array<float, 4>& c_c, const char* un);
+    MineClient(const char * server_addr, const char* skinpath, Texture& default_skin, const std::array<float, 4>& c_c, const char* un);
 
     void set_server_peer(ENetPeer* p);
     void receive_packet(unsigned char* data, size_t length, std::vector<std::unique_ptr<char[]>>& out_chat);
@@ -57,11 +57,13 @@ private:
     glm::mat4 get_top_view_matrix();
     void render_world();
 
+    Texture& default_skin_tex;
     Framebuffer minimap_frame, chat_frame;
     Buffer minimap_behind_buf, indicator_buf;
     Buffer chat_buf, chat_visible_buf;
     Buffer minimap_buf, overlay_buf, crosshair_buf, counters_buf, cursor_buf;
-    Buffer cube_buf, player_face_buf;
+    Buffer player_head_buf, player_body_buf, player_arm_left_buf, player_arm_right_buf, player_leg_left_buf, player_leg_right_buf;
+    Buffer player_helm_buf, player_coat_buf, player_sleeve_left_buf, player_sleeve_right_buf, player_pant_left_buf, player_pant_right_buf;
     ENetPeer* peer;
     ENetAddress address;
 
@@ -72,6 +74,7 @@ private:
     bool first_mouse;
     float prevx, prevy;
     bool send_str;
+    std::vector<unsigned char> skin_bytes;
 
     // to send at connection
     std::array<float, 4> my_crosshair_color;
@@ -83,6 +86,7 @@ private:
     std::vector<unsigned char> world;
     std::unique_ptr<Buffer> wall_buf, lower_world_buf, upper_world_buf;
     std::vector<PlayerData> players;
+    std::vector<std::unique_ptr<Texture>> skins;
     std::vector<Buffer> player_names_buf;
     unsigned char my_player_id;
 

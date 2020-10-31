@@ -2,11 +2,15 @@
 #include "fillers.h"
 #include "focus.h"
 
+#define LODEPNG_NO_COMPILE_ENCODER
+#define LODEPNG_NO_COMPILE_DISK
+#include "lodepng.h"
+
 #include <cmath>
 #include <cstring>
+#include <cstdio>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
-
 
 namespace {
     constexpr float min_pitch_to_look = -30.0f;
@@ -24,6 +28,7 @@ namespace {
     inline const glm::vec4 solidWhite{1.0f, 1.0f, 1.0f, 1.0f};
     inline const glm::vec4 solidBlack{0.0f, 0.0f, 0.0f, 1.0f};
     inline const glm::vec4 slightlyBlack{0.0f, 0.0f, 0.0f, 0.75f};
+    inline const glm::vec3 outerScaleVec{1.125f, 1.125f, 1.125f};
     inline std::string typed_str;
     inline constexpr size_t MAX_CHAT_LINES = 8;
 
@@ -265,67 +270,107 @@ namespace {
         }
     }
 
-    void fill_cube(VertexPtr verts)
+    void fill_player_part(VertexPtr verts, float u_l_all, float v_t_all, float h, float wz, float wx)
     {
+        const float center_u = u_l_all + (wz + wx);
+        PDD2 pz_uv{
+            {u_l_all + wx, v_t_all - wx},
+            {wz, 0.0f},
+            {0.0f, h},
+        };
+        PDD2 mz_uv{
+            {center_u + wx, v_t_all - wx},
+            {wz, 0.0f},
+            {0.0f, h},
+        };
+
+        PDD2 px_uv{
+            {u_l_all + wx, v_t_all - wx},
+            {-wx, 0.0f},
+            {0.0f, h},
+        };
+        PDD2 mx_uv{
+            {center_u + wx, v_t_all - wx},
+            {-wx, 0.0f},
+            {0.0f, h},
+        };
+
+        PDD2 py_uv{
+            {center_u - wz, v_t_all},
+            {wz, 0.0f},
+            {0.0f, wx},
+        };
+        PDD2 my_uv{
+            {center_u, v_t_all},
+            {wz, 0.0f},
+            {0.0f, wx},
+        };
+
         Fillers::fill_quad_generic(verts, 0, // +Z
             PDD3{
                 {+0.5f, +0.5f, +0.5f},
-                {-1, 0, 0},
+                {-1.0f, 0.0f, 0.0f},
                 {0.0f, +1.0f, 0.0f}
             },
-        plain_color_uv, solidWhite);
+        mz_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 1, // -X
             PDD3{
                 {-0.5f, +0.5f, +0.5f},
                 {0.0f, 0.0f, -1.0f},
                 {0.0f, +1.0f, 0.0f}
             },
-        plain_color_uv, solidWhite);
+        mx_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 2, // +Y
             PDD3{
                 {-0.5f, +0.5f, +0.5f},
                 {+1, 0, 0},
                 {0.0f, 0.0f, +1.0f}
             },
-        plain_color_uv, solidWhite);
+        py_uv, solidWhite);
 
         Fillers::fill_quad_generic(verts, 3, // -Z
             PDD3{
-                {-0.5f,-0.5f, -0.5f},
-                {0.0f,+1.0f,0.0f},
-                {-1.0f,0.0f,0.0f}
+                {-0.5f,+0.5f,-0.5f},
+                {+1.0f,0.0f,0.0f},
+                {0.0f,+1.0f,0.0f}
             },
-        plain_color_uv, solidWhite);
+        pz_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 4, // +X
             PDD3{
-                {+0.5f, -0.5f, +0.5f},
-                {0.0f,0.0f,-1.0f},
-                {0.0f,-1.0f,0.0f}
+                {+0.5f, +0.5f, -0.5f},
+                {0.0f,0.0f,+1.0f},
+                {0.0f,+1.0f,0.0f}
             },
-        plain_color_uv, solidWhite);
+        px_uv, solidWhite);
         Fillers::fill_quad_generic(verts, 5, // -Y
             PDD3{
                 {+0.5f, -0.5f, -0.5f},
                 {0.0f,0.0f,+1.0f},
                 {+1.0f,0.0f,0.0f}
             },
-        plain_color_uv, solidWhite);
+        my_uv, solidWhite);
     }
-
-    void fill_player_face(VertexPtr verts)
+    void fill_player(Buffer& head_buf, Buffer& body_buf, Buffer& arm_l_buf, Buffer& arm_r_buf, Buffer& leg_l_buf, Buffer& leg_r_buf)
     {
-        const PDD2 eye_uv{
-            {0.125f + 0.125f, 1.0f},
-            {0.0f, -0.25f},
-            {0.125f, 0.0f}
-        };
-        Fillers::fill_quad_generic(verts, 0,
-            PDD3{
-                {+0.5f,+0.5f, -0.5f - MyEpsilon},
-                {0.0f,-1.0f,0.0f},
-                {+1.0f,0.0f,0.0f},
-            },
-        eye_uv, solidBlack);
+        fill_player_part(head_buf.getAllVerts(), 0.0f, 1.0f, 1.0f/8.0f, 1.0f/8.0f, 1.0f/8.0f);
+        fill_player_part(body_buf.getAllVerts(), 0.25f, 0.75f, 3.0f/16.0f, 2.0f/16.0f, 1.0f/16.0f);
+
+        fill_player_part(arm_l_buf.getAllVerts(), 0.5f, 0.25f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        fill_player_part(arm_r_buf.getAllVerts(), 0.625f, 0.75f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        
+        fill_player_part(leg_l_buf.getAllVerts(), 0.25f, 0.25f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        fill_player_part(leg_r_buf.getAllVerts(), 0.0f, 0.75f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+    }
+    void fill_player_extra(Buffer& head_buf, Buffer& body_buf, Buffer& arm_l_buf, Buffer& arm_r_buf, Buffer& leg_l_buf, Buffer& leg_r_buf)
+    {
+        fill_player_part(head_buf.getAllVerts(), 0.5f, 1.0f, 1.0f/8.0f, 1.0f/8.0f, 1.0f/8.0f);
+        fill_player_part(body_buf.getAllVerts(), 0.25f, 0.5f, 3.0f/16.0f, 2.0f/16.0f, 1.0f/16.0f);
+
+        fill_player_part(arm_l_buf.getAllVerts(), 0.75f, 0.25f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        fill_player_part(arm_r_buf.getAllVerts(), 0.625f, 0.5f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        
+        fill_player_part(leg_l_buf.getAllVerts(), 0.0f, 0.25f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
+        fill_player_part(leg_r_buf.getAllVerts(), 0.0f, 0.5f, 3.0f/16.0f, 1.0f/16.0f, 1.0f/16.0f);
     }
 
     void fill_name(VertexPtr verts, std::string_view name)
@@ -640,9 +685,10 @@ namespace {
     }
 }
 
-MineClient::MineClient(const char * server_addr, const std::array<float, 4>& c_c, const char* un)
+MineClient::MineClient(const char * server_addr, const char* skinpath, Texture& default_skin, const std::array<float, 4>& c_c, const char* un)
 :
 host(enet_host_create(nullptr, 1, 2, 0, 0)),
+default_skin_tex(default_skin),
 minimap_frame(256, 256),
 chat_frame(MAX_CHAT_LINE_LEN * 32, (MAX_CHAT_LINES + 1) * 32),
 minimap_behind_buf(Buffer::Quads(1)),
@@ -654,8 +700,18 @@ overlay_buf(Buffer::Quads(1)),
 crosshair_buf(Buffer::Quads(1)),
 counters_buf(Buffer::Quads(5 + 4 + 4)),
 cursor_buf(Buffer::Quads(1)),
-cube_buf(Buffer::Quads(6)),
-player_face_buf(Buffer::Quads(1)),
+player_head_buf(Buffer::Quads(6)),
+player_body_buf(Buffer::Quads(6)),
+player_arm_left_buf(Buffer::Quads(6)),
+player_arm_right_buf(Buffer::Quads(6)),
+player_leg_left_buf(Buffer::Quads(6)),
+player_leg_right_buf(Buffer::Quads(6)),
+player_helm_buf(Buffer::Quads(6)),
+player_coat_buf(Buffer::Quads(6)),
+player_sleeve_left_buf(Buffer::Quads(6)),
+player_sleeve_right_buf(Buffer::Quads(6)),
+player_pant_left_buf(Buffer::Quads(6)),
+player_pant_right_buf(Buffer::Quads(6)),
 current_state(MineClient::State::NotConnected),
 pressed_m1(false),
 pressed_m2(false),
@@ -670,10 +726,25 @@ username(un)
     fill_minimap(minimap_buf.getAllVerts());
     fill_minimap_behind(minimap_behind_buf.getAllVerts());
     fill_overlay(overlay_buf.getAllVerts());
-    fill_cube(cube_buf.getAllVerts());
-    fill_player_face(player_face_buf.getAllVerts());
+    fill_player(player_head_buf, player_body_buf, player_arm_left_buf, player_arm_right_buf, player_leg_left_buf, player_leg_right_buf);
+    fill_player_extra(player_helm_buf, player_coat_buf, player_sleeve_left_buf, player_sleeve_right_buf, player_pant_left_buf, player_pant_right_buf);
     fill_chat_visible(chat_visible_buf.getAllVerts());
     fill_typed(chat_buf.getAllVerts());
+
+    if(skinpath == nullptr)
+    {
+        skin_bytes.resize(sizeof(PlayerMetaPacket));
+    }
+    else
+    {
+        FILE* fh = fopen(skinpath, "rb");
+        fseek(fh, 0, SEEK_END);
+        long bytes_sz = ftell(fh);
+        rewind(fh);
+        skin_bytes.resize(bytes_sz + sizeof(PlayerMetaPacket));
+        fread(skin_bytes.data() + sizeof(PlayerMetaPacket), 1, bytes_sz, fh);
+        fclose(fh);
+    }
 
     if(server_addr[0] == '\0')
     {
@@ -697,6 +768,7 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
         memcpy(&in, data, sizeof(in));
 
         players.resize(in.players);
+        skins.resize(in.players);
         my_player_id = in.your_id;
 
         width = in.width;
@@ -709,8 +781,11 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
         out.cross_b = 255 * my_crosshair_color[2];
         out.cross_a = 255 * my_crosshair_color[3];
         memcpy(out.username, username, sizeof(out.username));
+        out.skinbytes = ENET_HOST_TO_NET_32(skin_bytes.size() - sizeof(PlayerMetaPacket));
 
-        auto send_packet(enet_packet_create(&out, sizeof(out), ENET_PACKET_FLAG_RELIABLE));
+        memcpy(skin_bytes.data(), &out, sizeof(out));
+
+        auto send_packet(enet_packet_create(skin_bytes.data(), skin_bytes.size(), ENET_PACKET_FLAG_RELIABLE));
         enet_peer_send(peer, 0, send_packet);
         enet_host_flush(host.get());
 
@@ -718,18 +793,35 @@ void MineClient::receive_packet(unsigned char* data, size_t length, std::vector<
     }
     else if(current_state == MineClient::State::Waiting)
     {
-        size_t offset = 0;
+        size_t offset = 0, player_idx = 0;
         StartDataPacket in;
+        std::vector<unsigned char> skin_pixels;
         for(auto& player : players)
         {
             memcpy(&in, data + offset, sizeof(in));
-            offset += sizeof(in);
             player.fill(in.info);
             player.fill(in.meta);
             const char* name = in.meta.username;
             const size_t namelen = strnlen(name, MAX_NAME_LEN);
             player_names_buf.push_back(Buffer::Quads(namelen + 1));
             fill_name(player_names_buf.back().getAllVerts(), std::string_view{name, namelen});
+            
+            offset += sizeof(in);
+            enet_uint32 skin_sz = ENET_NET_TO_HOST_32(in.meta.skinbytes);
+            if(skin_sz)
+            {
+                skin_pixels.clear();
+                unsigned skin_w = 0, skin_h = 0;
+                lodepng::decode(skin_pixels, skin_w, skin_h, data + offset, skin_sz);
+                const unsigned w_b = skin_w * 4;
+                for(unsigned from_s = 0, from_e = ((skin_h - 1) * w_b); from_s < from_e; from_s += w_b, from_e -= w_b)
+                {
+                    std::swap_ranges(skin_pixels.begin() + from_e, skin_pixels.begin() + from_e + w_b, skin_pixels.begin() + from_s);
+                }
+                skins[player_idx] = std::make_unique<Texture>(skin_w, skin_h, skin_pixels.data());
+                offset += skin_sz;
+            }
+            player_idx++;
         }
 
         wall_buf = std::make_unique<Buffer>(Buffer::Quads((width + height) * 2));
@@ -1139,7 +1231,7 @@ void MineClient::handle_events(GLFWwindow* window, float mouse_sensitivity, int 
     }
 }
 
-void MineClient::render(RenderInfo& info)
+void MineClient::render(MineClient::RenderInfo& info)
 {
     const auto& self = players[my_player_id];
 
@@ -1192,18 +1284,27 @@ void MineClient::render(RenderInfo& info)
         if(i == my_player_id) continue;
 
         const auto& playa = players[i];
-
-        info.worldShader.setVec4("constColor", playa.color);
+        if(auto& sk = skins[i]; sk)
+        {
+            info.worldShader.setVec4("constColor", solidWhite);
+            sk->bind();
+        }
+        else
+        {
+            info.worldShader.setVec4("constColor", playa.color);
+            default_skin_tex.bind();
+        }
 
         const auto playerSpinMat = glm::rotate(glm::translate(glm::mat4(1.0f), playa.position), glm::radians(-(float(playa.yaw) + 90.0f)), glm::vec3{0, 1, 0});
 
-        cube_buf.bind();
-
         model = glm::translate(playerSpinMat, glm::vec3{0.0f, -0.35f, 0.0f});
         model = glm::scale(model, glm::vec3{0.25f, 0.45f, 0.125f});
-        
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
+        player_body_buf.bind();
+        player_body_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_coat_buf.bind();
+        player_coat_buf.draw();
 
         const auto swingRads = glm::radians(playa.movementSwing);
 
@@ -1217,7 +1318,11 @@ void MineClient::render(RenderInfo& info)
         model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
         model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
+        player_arm_left_buf.bind();
+        player_arm_left_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_sleeve_left_buf.bind();
+        player_sleeve_left_buf.draw();
         
         model = armMat;
         model = glm::translate(model, glm::vec3{0, -(0.125 + (0.45f / 2.0f)), 0});
@@ -1226,7 +1331,11 @@ void MineClient::render(RenderInfo& info)
         model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
         model = glm::scale(model, glm::vec3{0.125f, 0.45f, 0.125f});
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
+        player_arm_right_buf.bind();
+        player_arm_right_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_sleeve_right_buf.bind();
+        player_sleeve_right_buf.draw();
 
         model = playerSpinMat;
         auto legMat = model;
@@ -1238,7 +1347,11 @@ void MineClient::render(RenderInfo& info)
         model = glm::rotate(model, -swingRads, glm::vec3{1, 0, 0});
         model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
+        player_leg_left_buf.bind();
+        player_leg_left_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_pant_left_buf.bind();
+        player_pant_left_buf.draw();
         
         model = legMat;
         model = glm::translate(model, glm::vec3{0, -(0.125 + 0.45f + (0.425f / 2.0f)), 0});
@@ -1247,16 +1360,23 @@ void MineClient::render(RenderInfo& info)
         model = glm::rotate(model, swingRads, glm::vec3{1, 0, 0});
         model = glm::scale(model, glm::vec3{0.125f, 0.425f, 0.125f});
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
+        player_leg_right_buf.bind();
+        player_leg_right_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_pant_right_buf.bind();
+        player_pant_right_buf.draw();
 
         model = glm::rotate(playerSpinMat, glm::radians(float(playa.pitch)), glm::vec3{1, 0, 0});
         model = glm::scale(model, glm::vec3{0.25f, 0.25f, 0.25f});
         info.worldShader.setMat4("model", model);
-        cube_buf.draw();
-
-        player_face_buf.bind();
-        player_face_buf.draw();
+        player_head_buf.bind();
+        player_head_buf.draw();
+        info.worldShader.setMat4("model", glm::scale(model, outerScaleVec));
+        player_helm_buf.bind();
+        player_helm_buf.draw();
     }
+
+    info.spritesheet.bind();
 
     info.worldShader.setVec4("constColor", solidWhite);
 

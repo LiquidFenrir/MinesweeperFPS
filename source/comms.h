@@ -9,7 +9,7 @@
 
 inline constexpr enet_uint16 COMMS_PORT = 37777;
 inline constexpr float POS_SCALE = 10000.0f;
-inline constexpr int TICKS_PER_SEC = 15;
+inline constexpr int TICKS_PER_SEC = 25;
 inline constexpr float TIME_PER_TICK = 1.0f/TICKS_PER_SEC;
 inline constexpr float MovementSpeed = 2.0f;
 inline constexpr float MaxSwingAmplitude = 45.0f; // max degrees
@@ -47,6 +47,7 @@ struct ServerWorldPacketInit {
 struct PlayerMetaPacket {
     char username[MAX_NAME_LEN];
     unsigned char cross_r, cross_g, cross_b, cross_a;
+    enet_uint32 skinbytes;
 };
 // --------------------------------------
 
